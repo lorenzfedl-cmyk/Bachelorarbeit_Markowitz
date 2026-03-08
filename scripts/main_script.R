@@ -13,5 +13,5 @@ returns_numeric[returns_numeric == 0] <- NA
 # Kovarianzmatrix berechnen
 cov_matrix <- cov(returns_numeric, use = "pairwise.complete.obs")
 
-
+git status
 
