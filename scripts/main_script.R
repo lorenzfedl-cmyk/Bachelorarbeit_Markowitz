@@ -1,11 +1,32 @@
 # libraries laden
+library(corpcor)
 library(tidyquant)
 library(readxl)
+library(quadprog)
 
 # V A R I A B L E N
 
-# Schwellenwert für die Summe von Nullen an Tagen, die mit "NA" ersetzt werden sollen
+# Schwellenwert für die relative Anzahl von Nullen an Tagen, die mit "NA" ersetzt werden sollen
 thresh_zero_return <- 0.05
+
+# Schwellenewert für die relative Anzahl von Renditen pro Aktie die vorhanden sein müssen
+thresh_valid_returns <- 0.25
+
+# Anzahl der ermittelten Portfolios auf der Effizienzlinie (für Portfolios mit Zielrisiko)
+# zwischen min var Portfolio und max. Rendite Portfolio
+num_port_eff <- 100
+
+# Zielrenditen für Portfolios
+
+target_ret_a <- 0.12
+target_ret_b <- 0.15
+target_ret_c <- 0.18
+
+# Zielrisiko für Portfolios
+
+target_vol_a <- 0.10
+target_vol_b <- 0.12
+target_vol_c <- 0.15
 
 
 # daten laden
@@ -20,15 +41,22 @@ return_2025 <- read_excel("data/FTSE 100 FROM 2010 TO 2025.xlsx", sheet = "2025 
 
 # Datumspalte (erste Spalte) entfernen
 return_2010 <- return_2010[, -1]
-return_2015 <- return_2015[, -1]
-return_2020 <- return_2020[, -1]
-return_2025 <- return_2025[, -1]
+return_2015 <- return_2015[, -1] 
+return_2020 <- return_2020[, -1] 
+return_2025 <- return_2025[, -1] 
 
 # sämtliche Spalten in numerische umwandeln
 return_2010 <- data.frame(lapply(return_2010, as.numeric))
 return_2015 <- data.frame(lapply(return_2015, as.numeric))
 return_2020 <- data.frame(lapply(return_2020, as.numeric))
 return_2025 <- data.frame(lapply(return_2025, as.numeric))
+
+# Prozentzahlen in Dezimalzahlen umwandeln
+
+return_2010 <- return_2010 / 100
+return_2015 <- return_2015 / 100
+return_2020 <- return_2020 / 100
+return_2025 <- return_2025 / 100
 
 # Funktion zum Ersetzen von Nullen durch NA bei Überschreiten des Schwellenwerts
 replace_zeros_with_na <- function(df, threshold) {
@@ -47,20 +75,329 @@ replace_zeros_with_na <- function(df, threshold) {
   return(df)
 }
 
-# Funktion auf alle vier Datensätze anwenden
+# Funktion zum Entfernen von Aktien (Spalten) mit zu wenig Datenpunkten
+filter_stocks_by_na <- function(df, threshold) {
+  # relativen Anteil an gesamten Return ermitteln um mit dem Schwellenwert vergleichen zu können
+  valid_ratio <- colSums(!is.na(df)) / nrow(df)
+  
+  # Informativ: Zusammenfassung der Aktien, die entfernt wurden
+  dropped_stocks <- names(df)[valid_ratio < threshold]
+  
+  # Konsolenausgabe der entfernten Aktien
+  if(length(dropped_stocks) > 0) {
+    cat("Entfernte Aktien (weniger als", threshold * 100, "% Daten):\n")
+    cat(paste(dropped_stocks, collapse = ", "), "\n\n")
+  }
+  
+  # Behalte nur die Spalten, die den Schwellenwert erreichen oder überschreiten
+  df_filtered <- df[, valid_ratio >= threshold]
+  
+  return(df_filtered)
+}
+
+# Alle Funktionen auf alle vier Datensätze anwenden
 return_2010 <- replace_zeros_with_na(return_2010, thresh_zero_return)
 return_2015 <- replace_zeros_with_na(return_2015, thresh_zero_return)
 return_2020 <- replace_zeros_with_na(return_2020, thresh_zero_return)
 return_2025 <- replace_zeros_with_na(return_2025, thresh_zero_return)
 
-# Kovarianzmatrizen nur mit "kompletten/vorhandenen" Zahlenpaare berechnen
-cov_matrix_2010 <- cov(return_2010, use = "pairwise.complete.obs")
-cov_matrix_2015 <- cov(return_2015, use = "pairwise.complete.obs")
-cov_matrix_2020 <- cov(return_2020, use = "pairwise.complete.obs")
-cov_matrix_2025 <- cov(return_2025, use = "pairwise.complete.obs")
+return_2010 <- filter_stocks_by_na(return_2010, thresh_valid_returns)
+return_2015 <- filter_stocks_by_na(return_2015, thresh_valid_returns)
+return_2020 <- filter_stocks_by_na(return_2020, thresh_valid_returns)
+return_2025 <- filter_stocks_by_na(return_2025, thresh_valid_returns)
+
+# Kovarianzmatrizen nur mit "kompletten/vorhandenen" Zahlenpaare berechnen (annualisiert)
+cov_matrix_2010 <- cov(return_2010, use = "pairwise.complete.obs") * 252
+cov_matrix_2015 <- cov(return_2015, use = "pairwise.complete.obs") * 252
+cov_matrix_2020 <- cov(return_2020, use = "pairwise.complete.obs") * 252
+cov_matrix_2025 <- cov(return_2025, use = "pairwise.complete.obs") * 252
+
+# Positive Definitheit erzwingen (für solve.QP)
+
+cov_matrix_2010 <- make.positive.definite(cov_matrix_2010)
+cov_matrix_2015 <- make.positive.definite(cov_matrix_2015)
+cov_matrix_2020 <- make.positive.definite(cov_matrix_2020)
+cov_matrix_2025 <- make.positive.definite(cov_matrix_2025)
+
+# historische, annualisierte Erwartungswerte sämtlicher Aktien
+
+exp_return_2010 <- colMeans(return_2010, na.rm = TRUE) * 252
+exp_return_2015 <- colMeans(return_2015, na.rm = TRUE) * 252
+exp_return_2020 <- colMeans(return_2020, na.rm = TRUE) * 252
+exp_return_2025 <- colMeans(return_2025, na.rm = TRUE) * 252
+
+# Funktion für eine erwartete Portfoliorendite
+portfolio_return <- function(w, mu) { sum(w * mu)}
+
+# Funktion für eine Portfoliovolatilität
+portfolio_risk <- function(w, Sigma) {sqrt(as.numeric(t(w) %*% Sigma %*% w))}
+
+# Funktion für ein Min.Var.-Portfolio
+min_var_portfolio <- function(mu, Sigma) {
+  
+  # Anzahl Assets
+  n <- length(mu)
+  
+  # Varianzminimierung
+  Dmat <- 2 * Sigma 
+  dvec <- rep(0, n)  
+  
+  # Nebenbedingungen: Summe Gewichte = 1 UND keine Short Sales w >= 0
+  Amat <- cbind(
+    rep(1, n),   
+    diag(n)      
+  )
+  
+  bvec <- c(
+    1,          
+    rep(0, n)  
+  )
+  
+  # meq = 1 bedeutet:  erste Bedingung ist Gleichung (sum(w) = 1) rest sind Ungleichungen (>=)
+  result <- solve.QP(Dmat, dvec, Amat, bvec, meq = 1)
+  
+  # optimale Gewichte w
+  w <- result$solution
+  
+  # Rückgabe als Liste
+  list(
+    weights = w,
+    expected_return = portfolio_return(w, mu),
+    risk = portfolio_risk(w, Sigma)
+  )
+}
+
+# Funktion für ein Portfolio mit vorgegebener Zielrendite
+target_return_portfolio <- function(mu, Sigma, target_ret) {
+  
+  n <- length(mu)
+  Dmat <- 2 * Sigma  
+  dvec <- rep(0, n)  
+  
+  # Sicherheitsprüfung ob die Renditeerwartung möglich ist
+  max_possible_ret <- max(mu, na.rm = TRUE)
+  if(target_ret > max_possible_ret) {
+    warning(paste("Zielrendite", round(target_ret*100,2), "% ist mathematisch unmöglich. Setze auf maximal mögliche Rendite von", round(max_possible_ret*100,2), "%."))
+    target_ret <- max_possible_ret
+  }
+  
+  # Nebenbedingungen: Summe Gewichte = 1 UND keine Short Sales w >= 0
+  Amat <- cbind(
+    rep(1, n),   
+    mu,          
+    diag(n)      
+  )
+  
+  bvec <- c(
+    1,           
+    target_ret,  
+    rep(0, n)    
+  )
+  
+  # solve.QP durchführen (eingepackt in tryCatch, falls es unlösbare Konstellationen gibt)
+  result <- try(solve.QP(Dmat, dvec, Amat, bvec, meq = 1), silent = TRUE)
+  
+  # Fehlermeldung falls keine Lösung gefunden wurde
+  if (inherits(result, "try-error")) {
+    return(list(weights = rep(NA, n), expected_return = NA, risk = NA))
+  }
+  
+  w <- result$solution
+  
+  list(
+    weights = w,
+    expected_return = portfolio_return(w, mu),
+    risk = portfolio_risk(w, Sigma)
+  )
+}
+
+# Funktion für ein Portfolio mit vorgegebenem Zielrisiko
+target_vola_portfolio <- function(mu, Sigma, target_vol) {
+  
+  # 1. min var Portfolio ermitteln
+  mvp <- min_var_portfolio(mu, Sigma)
+  
+  # Sicherheitsprüfung ob Zielrisiko erreichbar ist, wenn nicht -> Fehlermeldung
+  if(target_vol < mvp$risk) {
+    warning(paste("Zielrisiko", round(target_vol*100,2), "% ist zu gering! Das absolut niedrigste Risiko am Markt ist", round(mvp$risk*100,2), "%. Gebe Minimum-Varianz-Portfolio zurück."))
+    return(mvp)
+  }
+  
+  # Maximal mögliche Rendite ermitteln
+  max_ret <- max(mu, na.rm = TRUE)
+  
+  # einzelne Portfolios auf der Effizienzlinie ermitteln mit Anzahl von "num_port_eff"
+  ret_grid <- seq(mvp$expected_return, max_ret, length.out = num_port_eff)
+  
+  best_port <- mvp
+  min_diff <- Inf 
+  
+  # Portfolio nehmen, das am nächsten vom Zielportfolio ist
+  for(ret in ret_grid) {
+    port <- target_return_portfolio(mu, Sigma, ret)
+    if(!is.na(port$risk)) {
+      # Differenz von Zielportfolio und und grid-portfolio
+      diff <- abs(port$risk - target_vol)
+      
+      # Wenn es näher dran ist, dann speichern
+      if(diff < min_diff) {
+        min_diff <- diff
+        best_port <- port
+      }
+    }
+  }
+  
+  return(best_port)
+}
 
 
 
+# ZIEL-PORTFOLIOS BERECHNEN: Jahr 2010
+
+# Minimum-Varianz-Portfolio berechnen
+mvp_2010 <- min_var_portfolio(exp_return_2010, cov_matrix_2010)
+
+# Portfolios basierend auf Zielrenditen berechnen
+port_ret_a <- target_return_portfolio(exp_return_2010, cov_matrix_2010, target_ret_a)
+port_ret_b <- target_return_portfolio(exp_return_2010, cov_matrix_2010, target_ret_b)
+port_ret_c <- target_return_portfolio(exp_return_2010, cov_matrix_2010, target_ret_c)
+
+# Portfolios basierend auf Zielrisiko berechnen
+port_vol_a <- target_vola_portfolio(exp_return_2010, cov_matrix_2010, target_vol_a)
+port_vol_b <- target_vola_portfolio(exp_return_2010, cov_matrix_2010, target_vol_b)
+port_vol_c <- target_vola_portfolio(exp_return_2010, cov_matrix_2010, target_vol_c)
+
+# Ergebnisse tabelarisch zusammenfassen
+summary_2010 <- data.frame(
+  Portfolio_Typ = c(
+    "Min Variance", 
+    paste0("Target Ret ", target_ret_a * 100, "%"), 
+    paste0("Target Ret ", target_ret_b * 100, "%"), 
+    paste0("Target Ret ", target_ret_c * 100, "%"), 
+    paste0("Target Vol ", target_vol_a * 100, "%"), 
+    paste0("Target Vol ", target_vol_b * 100, "%"), 
+    paste0("Target Vol ", target_vol_c * 100, "%")
+                    ),
+  Rendite_Prozent = round(c(mvp_2010$expected_return, 
+                            port_ret_a$expected_return, port_ret_b$expected_return, port_ret_c$expected_return,
+                            port_vol_a$expected_return, port_vol_b$expected_return, port_vol_c$expected_return) * 100, 2),
+  Vola_Prozent = round(c(mvp_2010$risk, 
+                         port_ret_a$risk, port_ret_b$risk, port_ret_c$risk,
+                         port_vol_a$risk, port_vol_b$risk, port_vol_c$risk) * 100, 2)
+)
+
+print(summary_2010)
+
+
+# ZIEL-PORTFOLIOS BERECHNEN: Jahr 2015
+
+# Minimum-Varianz-Portfolio berechnen
+mvp_2015 <- min_var_portfolio(exp_return_2015, cov_matrix_2015)
+
+# Portfolios basierend auf Zielrenditen berechnen
+port_ret_a <- target_return_portfolio(exp_return_2015, cov_matrix_2015, target_ret_a)
+port_ret_b <- target_return_portfolio(exp_return_2015, cov_matrix_2015, target_ret_b)
+port_ret_c <- target_return_portfolio(exp_return_2015, cov_matrix_2015, target_ret_c)
+
+# Portfolios basierend auf Zielrisiko berechnen
+port_vol_a <- target_vola_portfolio(exp_return_2015, cov_matrix_2015, target_vol_a)
+port_vol_b <- target_vola_portfolio(exp_return_2015, cov_matrix_2015, target_vol_b)
+port_vol_c <- target_vola_portfolio(exp_return_2015, cov_matrix_2015, target_vol_c)
+
+# Ergebnisse tabelarisch zusammenfassen
+summary_2015 <- data.frame(
+  Portfolio_Typ = c(
+    "Min Variance", 
+    paste0("Target Ret ", target_ret_a * 100, "%"), 
+    paste0("Target Ret ", target_ret_b * 100, "%"), 
+    paste0("Target Ret ", target_ret_c * 100, "%"), 
+    paste0("Target Vol ", target_vol_a * 100, "%"), 
+    paste0("Target Vol ", target_vol_b * 100, "%"), 
+    paste0("Target Vol ", target_vol_c * 100, "%")
+  ),
+  Rendite_Prozent = round(c(mvp_2015$expected_return, 
+                            port_ret_a$expected_return, port_ret_b$expected_return, port_ret_c$expected_return,
+                            port_vol_a$expected_return, port_vol_b$expected_return, port_vol_c$expected_return) * 100, 2),
+  Vola_Prozent = round(c(mvp_2015$risk, 
+                         port_ret_a$risk, port_ret_b$risk, port_ret_c$risk,
+                         port_vol_a$risk, port_vol_b$risk, port_vol_c$risk) * 100, 2)
+)
+
+print(summary_2015)
+
+
+# ZIEL-PORTFOLIOS BERECHNEN: Jahr 2020
+
+# Minimum-Varianz-Portfolio berechnen
+mvp_2020 <- min_var_portfolio(exp_return_2020, cov_matrix_2020)
+
+# Portfolios basierend auf Zielrenditen berechnen
+port_ret_a <- target_return_portfolio(exp_return_2020, cov_matrix_2020, target_ret_a)
+port_ret_b <- target_return_portfolio(exp_return_2020, cov_matrix_2020, target_ret_b)
+port_ret_c <- target_return_portfolio(exp_return_2020, cov_matrix_2020, target_ret_c)
+
+# Portfolios basierend auf Zielrisiko berechnen
+port_vol_a <- target_vola_portfolio(exp_return_2020, cov_matrix_2020, target_vol_a)
+port_vol_b <- target_vola_portfolio(exp_return_2020, cov_matrix_2020, target_vol_b)
+port_vol_c <- target_vola_portfolio(exp_return_2020, cov_matrix_2020, target_vol_c)
+
+# Ergebnisse tabelarisch zusammenfassen
+summary_2020 <- data.frame(
+  Portfolio_Typ = c(
+    "Min Variance", 
+    paste0("Target Ret ", target_ret_a * 100, "%"), 
+    paste0("Target Ret ", target_ret_b * 100, "%"), 
+    paste0("Target Ret ", target_ret_c * 100, "%"), 
+    paste0("Target Vol ", target_vol_a * 100, "%"), 
+    paste0("Target Vol ", target_vol_b * 100, "%"), 
+    paste0("Target Vol ", target_vol_c * 100, "%")
+  ),
+  Rendite_Prozent = round(c(mvp_2020$expected_return, 
+                            port_ret_a$expected_return, port_ret_b$expected_return, port_ret_c$expected_return,
+                            port_vol_a$expected_return, port_vol_b$expected_return, port_vol_c$expected_return) * 100, 2),
+  Vola_Prozent = round(c(mvp_2020$risk, 
+                         port_ret_a$risk, port_ret_b$risk, port_ret_c$risk,
+                         port_vol_a$risk, port_vol_b$risk, port_vol_c$risk) * 100, 2)
+)
+
+print(summary_2020)
+
+
+# ZIEL-PORTFOLIOS BERECHNEN: Jahr 2025
+
+# Minimum-Varianz-Portfolio berechnen
+mvp_2025 <- min_var_portfolio(exp_return_2025, cov_matrix_2025)
+
+# Portfolios basierend auf Zielrenditen berechnen
+port_ret_a <- target_return_portfolio(exp_return_2025, cov_matrix_2025, target_ret_a)
+port_ret_b <- target_return_portfolio(exp_return_2025, cov_matrix_2025, target_ret_b)
+port_ret_c <- target_return_portfolio(exp_return_2025, cov_matrix_2025, target_ret_c)
+
+# Portfolios basierend auf Zielrisiko berechnen
+port_vol_a <- target_vola_portfolio(exp_return_2025, cov_matrix_2025, target_vol_a)
+port_vol_b <- target_vola_portfolio(exp_return_2025, cov_matrix_2025, target_vol_b)
+port_vol_c <- target_vola_portfolio(exp_return_2025, cov_matrix_2025, target_vol_c)
+
+# Ergebnisse tabelarisch zusammenfassen
+summary_2025 <- data.frame(
+  Portfolio_Typ = c(
+    "Min Variance", 
+    paste0("Target Ret ", target_ret_a * 100, "%"), 
+    paste0("Target Ret ", target_ret_b * 100, "%"), 
+    paste0("Target Ret ", target_ret_c * 100, "%"), 
+    paste0("Target Vol ", target_vol_a * 100, "%"), 
+    paste0("Target Vol ", target_vol_b * 100, "%"), 
+    paste0("Target Vol ", target_vol_c * 100, "%")
+  ),
+  Rendite_Prozent = round(c(mvp_2025$expected_return, 
+                            port_ret_a$expected_return, port_ret_b$expected_return, port_ret_c$expected_return,
+                            port_vol_a$expected_return, port_vol_b$expected_return, port_vol_c$expected_return) * 100, 2),
+  Vola_Prozent = round(c(mvp_2025$risk, 
+                         port_ret_a$risk, port_ret_b$risk, port_ret_c$risk,
+                         port_vol_a$risk, port_vol_b$risk, port_vol_c$risk) * 100, 2)
+)
+
+print(summary_2025)
 
 
 
