@@ -1,6 +1,5 @@
 # libraries laden
 library(corpcor)
-library(tidyquant)
 library(readxl)
 library(quadprog)
 
@@ -17,19 +16,19 @@ thresh_valid_returns <- 0.25
 num_port_eff <- 100
 
 # Zielrenditen für Portfolios
-
 target_ret_a <- 0.12
 target_ret_b <- 0.15
 target_ret_c <- 0.18
 
 # Zielrisiko für Portfolios
-
 target_vol_a <- 0.10
 target_vol_b <- 0.12
 target_vol_c <- 0.15
 
+# Mindestgewicht für Aktien, die in den finalen Portfolios aufgenommen werden sollen
+min_share_weight <- 0.0001
 
-# daten laden
+# Daten laden
 meta_2010 <- read_excel("data/FTSE 100 FROM 2010 TO 2025.xlsx", sheet = "2010 META")
 meta_2015 <- read_excel("data/FTSE 100 FROM 2010 TO 2025.xlsx", sheet = "2015 META")
 meta_2020 <- read_excel("data/FTSE 100 FROM 2010 TO 2025.xlsx", sheet = "2020 META")
@@ -52,7 +51,6 @@ return_2020 <- data.frame(lapply(return_2020, as.numeric))
 return_2025 <- data.frame(lapply(return_2025, as.numeric))
 
 # Prozentzahlen in Dezimalzahlen umwandeln
-
 return_2010 <- return_2010 / 100
 return_2015 <- return_2015 / 100
 return_2020 <- return_2020 / 100
@@ -95,7 +93,33 @@ filter_stocks_by_na <- function(df, threshold) {
   return(df_filtered)
 }
 
-# Alle Funktionen auf alle vier Datensätze anwenden
+# Funktion zum Extrahieren und Säubern der Portfolio-Gewichte
+extract_weights <- function(portfolio_result, return_df, year_label, port_label) {
+  
+  # Sicherheitsprüfung, falls das Portfolio nicht berechnet werden konnte
+  if(is.na(portfolio_result$risk[1])) return(NULL)
+  
+  # Tabelle bauen aus Spaltennamen (Aktien) und Gewichten
+  df <- data.frame(
+    Jahr = year_label,
+    Portfolio_Typ = port_label,
+    Aktie = colnames(return_df),
+    Gewicht = round(portfolio_result$weights, 4) # Runden auf 4 Nachkommastellen
+  )
+  
+  # Es werden nur Aktien behalten, die ein Gewicht von mind. "min_share_weight" haben.
+  df <- df[df$Gewicht >= min_share_weight, ]
+  
+  # Ergebnisse nach Gewicht absteigend sortieren
+  df <- df[order(-df$Gewicht), ]
+  
+  # Zeilennamen resetten
+  rownames(df) <- NULL
+  
+  return(df)
+}
+
+# Alle NA/0 - Funktionen auf alle vier Datensätze anwenden
 return_2010 <- replace_zeros_with_na(return_2010, thresh_zero_return)
 return_2015 <- replace_zeros_with_na(return_2015, thresh_zero_return)
 return_2020 <- replace_zeros_with_na(return_2020, thresh_zero_return)
@@ -113,14 +137,12 @@ cov_matrix_2020 <- cov(return_2020, use = "pairwise.complete.obs") * 252
 cov_matrix_2025 <- cov(return_2025, use = "pairwise.complete.obs") * 252
 
 # Positive Definitheit erzwingen (für solve.QP)
-
 cov_matrix_2010 <- make.positive.definite(cov_matrix_2010)
 cov_matrix_2015 <- make.positive.definite(cov_matrix_2015)
 cov_matrix_2020 <- make.positive.definite(cov_matrix_2020)
 cov_matrix_2025 <- make.positive.definite(cov_matrix_2025)
 
 # historische, annualisierte Erwartungswerte sämtlicher Aktien
-
 exp_return_2010 <- colMeans(return_2010, na.rm = TRUE) * 252
 exp_return_2015 <- colMeans(return_2015, na.rm = TRUE) * 252
 exp_return_2020 <- colMeans(return_2020, na.rm = TRUE) * 252
@@ -250,8 +272,6 @@ target_vola_portfolio <- function(mu, Sigma, target_vol) {
   return(best_port)
 }
 
-
-
 # ZIEL-PORTFOLIOS BERECHNEN: Jahr 2010
 
 # Minimum-Varianz-Portfolio berechnen
@@ -288,8 +308,21 @@ summary_2010 <- data.frame(
 
 print(summary_2010)
 
+# Gewichte exportieren/extrahieren 2010
+w_mvp_2010   <- extract_weights(mvp_2010, return_2010, "2010", "Min Variance")
 
-# ZIEL-PORTFOLIOS BERECHNEN: Jahr 2015
+w_ret_a_2010 <- extract_weights(port_ret_a, return_2010, "2010", paste0("Target Ret ", target_ret_a*100, "%"))
+w_ret_b_2010 <- extract_weights(port_ret_b, return_2010, "2010", paste0("Target Ret ", target_ret_b*100, "%"))
+w_ret_c_2010 <- extract_weights(port_ret_c, return_2010, "2010", paste0("Target Ret ", target_ret_c*100, "%"))
+
+w_vol_a_2010 <- extract_weights(port_vol_a, return_2010, "2010", paste0("Target Vol ", target_vol_a*100, "%"))
+w_vol_b_2010 <- extract_weights(port_vol_b, return_2010, "2010", paste0("Target Vol ", target_vol_b*100, "%"))
+w_vol_c_2010 <- extract_weights(port_vol_c, return_2010, "2010", paste0("Target Vol ", target_vol_c*100, "%"))
+
+# Alle Gewichte in ein Dataframe zusamensetzen
+all_weights_2010 <- rbind(w_mvp_2010, 
+                          w_ret_a_2010, w_ret_b_2010, w_ret_c_2010, 
+                          w_vol_a_2010, w_vol_b_2010, w_vol_c_2010)
 
 # Minimum-Varianz-Portfolio berechnen
 mvp_2015 <- min_var_portfolio(exp_return_2015, cov_matrix_2015)
@@ -325,6 +358,21 @@ summary_2015 <- data.frame(
 
 print(summary_2015)
 
+# Gewichte exportieren/extrahieren 2015
+w_mvp_2015   <- extract_weights(mvp_2015, return_2015, "2015", "Min Variance")
+
+w_ret_a_2015 <- extract_weights(port_ret_a, return_2015, "2015", paste0("Target Ret ", target_ret_a*100, "%"))
+w_ret_b_2015 <- extract_weights(port_ret_b, return_2015, "2015", paste0("Target Ret ", target_ret_b*100, "%"))
+w_ret_c_2015 <- extract_weights(port_ret_c, return_2015, "2015", paste0("Target Ret ", target_ret_c*100, "%"))
+
+w_vol_a_2015 <- extract_weights(port_vol_a, return_2015, "2015", paste0("Target Vol ", target_vol_a*100, "%"))
+w_vol_b_2015 <- extract_weights(port_vol_b, return_2015, "2015", paste0("Target Vol ", target_vol_b*100, "%"))
+w_vol_c_2015 <- extract_weights(port_vol_c, return_2015, "2015", paste0("Target Vol ", target_vol_c*100, "%"))
+
+# Alle Gewichte in ein Dataframe zusamensetzen
+all_weights_2015 <- rbind(w_mvp_2015, 
+                          w_ret_a_2015, w_ret_b_2015, w_ret_c_2015, 
+                          w_vol_a_2015, w_vol_b_2015, w_vol_c_2015)
 
 # ZIEL-PORTFOLIOS BERECHNEN: Jahr 2020
 
@@ -362,6 +410,21 @@ summary_2020 <- data.frame(
 
 print(summary_2020)
 
+# Gewichte exportieren/extrahieren 2020
+w_mvp_2020   <- extract_weights(mvp_2020, return_2020, "2020", "Min Variance")
+
+w_ret_a_2020 <- extract_weights(port_ret_a, return_2020, "2020", paste0("Target Ret ", target_ret_a*100, "%"))
+w_ret_b_2020 <- extract_weights(port_ret_b, return_2020, "2020", paste0("Target Ret ", target_ret_b*100, "%"))
+w_ret_c_2020 <- extract_weights(port_ret_c, return_2020, "2020", paste0("Target Ret ", target_ret_c*100, "%"))
+
+w_vol_a_2020 <- extract_weights(port_vol_a, return_2020, "2020", paste0("Target Vol ", target_vol_a*100, "%"))
+w_vol_b_2020 <- extract_weights(port_vol_b, return_2020, "2020", paste0("Target Vol ", target_vol_b*100, "%"))
+w_vol_c_2020 <- extract_weights(port_vol_c, return_2020, "2020", paste0("Target Vol ", target_vol_c*100, "%"))
+
+# Alle Gewichte in ein Dataframe zusamensetzen
+all_weights_2020 <- rbind(w_mvp_2020, 
+                          w_ret_a_2020, w_ret_b_2020, w_ret_c_2020, 
+                          w_vol_a_2020, w_vol_b_2020, w_vol_c_2020)
 
 # ZIEL-PORTFOLIOS BERECHNEN: Jahr 2025
 
@@ -399,7 +462,42 @@ summary_2025 <- data.frame(
 
 print(summary_2025)
 
+# Gewichte exportieren/extrahieren 2025
+w_mvp_2025   <- extract_weights(mvp_2025, return_2025, "2025", "Min Variance")
 
+w_ret_a_2025 <- extract_weights(port_ret_a, return_2025, "2025", paste0("Target Ret ", target_ret_a*100, "%"))
+w_ret_b_2025 <- extract_weights(port_ret_b, return_2025, "2025", paste0("Target Ret ", target_ret_b*100, "%"))
+w_ret_c_2025 <- extract_weights(port_ret_c, return_2025, "2025", paste0("Target Ret ", target_ret_c*100, "%"))
+
+w_vol_a_2025 <- extract_weights(port_vol_a, return_2025, "2025", paste0("Target Vol ", target_vol_a*100, "%"))
+w_vol_b_2025 <- extract_weights(port_vol_b, return_2025, "2025", paste0("Target Vol ", target_vol_b*100, "%"))
+w_vol_c_2025 <- extract_weights(port_vol_c, return_2025, "2025", paste0("Target Vol ", target_vol_c*100, "%"))
+
+# Alle Gewichte in ein Dataframe zusamensetzen
+all_weights_2025 <- rbind(w_mvp_2025, 
+                          w_ret_a_2025, w_ret_b_2025, w_ret_c_2025, 
+                          w_vol_a_2025, w_vol_b_2025, w_vol_c_2025)
+
+# Alle Jahre zu einer Tabelle zusammenfügen 
+master_weights <- rbind(all_weights_2010, all_weights_2015, all_weights_2020, all_weights_2025)
+
+# jeweiliges Jahr zur Summary hinzufügen
+summary_2010$Jahr <- "2010"
+summary_2015$Jahr <- "2015"
+summary_2020$Jahr <- "2020"
+summary_2025$Jahr <- "2025"
+
+# Zusammenfügen der Summary-Tabellen
+master_summary <- rbind(summary_2010, summary_2015, summary_2020, summary_2025)
+
+# Spaltenordnung herstellen
+master_summary <- master_summary[, c("Jahr", "Portfolio_Typ", "Rendite_Prozent", "Vola_Prozent")]
+
+# als CSV speichern
+write.csv2(master_weights, "data/Portfolio_Gewichte_Master.csv", row.names = FALSE)
+write.csv2(master_summary, "data/Portfolio_Summary_Master.csv", row.names = FALSE)
+
+cat("Berechnung abgeschlossen. Daten wurden erfolgreich exportiert!\n")
 
 
 

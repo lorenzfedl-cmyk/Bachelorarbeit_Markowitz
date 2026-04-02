@@ -1,0 +1,29 @@
+"Jahr";"Portfolio_Typ";"Rendite_Prozent";"Vola_Prozent"
+"2010";"Min Variance";14,99;15,82
+"2010";"Target Ret 12%";14,99;15,82
+"2010";"Target Ret 15%";15;15,82
+"2010";"Target Ret 18%";18;15,94
+"2010";"Target Vol 10%";14,99;15,82
+"2010";"Target Vol 12%";14,99;15,82
+"2010";"Target Vol 15%";14,99;15,82
+"2015";"Min Variance";15,22;10,06
+"2015";"Target Ret 12%";15,22;10,06
+"2015";"Target Ret 15%";15,22;10,06
+"2015";"Target Ret 18%";18;10,13
+"2015";"Target Vol 10%";15,22;10,06
+"2015";"Target Vol 12%";29,39;11,95
+"2015";"Target Vol 15%";38,18;14,98
+"2020";"Min Variance";13,87;11,29
+"2020";"Target Ret 12%";13,87;11,29
+"2020";"Target Ret 15%";15;11,3
+"2020";"Target Ret 18%";18;11,41
+"2020";"Target Vol 10%";13,87;11,29
+"2020";"Target Vol 12%";23,67;11,98
+"2020";"Target Vol 15%";34,14;14,99
+"2025";"Min Variance";11,31;11,41
+"2025";"Target Ret 12%";12;11,42
+"2025";"Target Ret 15%";15;11,95
+"2025";"Target Ret 18%";18;13,31
+"2025";"Target Vol 10%";11,31;11,41
+"2025";"Target Vol 12%";15,23;12,03
+"2025";"Target Vol 15%";20,39;14,96
