@@ -493,9 +493,20 @@ master_summary <- rbind(summary_2010, summary_2015, summary_2020, summary_2025)
 # Spaltenordnung herstellen
 master_summary <- master_summary[, c("Jahr", "Portfolio_Typ", "Rendite_Prozent", "Vola_Prozent")]
 
+# Vola aus Kovarianzmatrix ermitteln
+vola_2010 <- data.frame(Jahr = "2010", Aktie = colnames(cov_matrix_2010), Volatilitat = sqrt(diag(cov_matrix_2010)))
+vola_2015 <- data.frame(Jahr = "2015", Aktie = colnames(cov_matrix_2015), Volatilitat = sqrt(diag(cov_matrix_2015)))
+vola_2020 <- data.frame(Jahr = "2020", Aktie = colnames(cov_matrix_2020), Volatilitat = sqrt(diag(cov_matrix_2020)))
+vola_2025 <- data.frame(Jahr = "2025", Aktie = colnames(cov_matrix_2025), Volatilitat = sqrt(diag(cov_matrix_2025)))
+
+# Alle Vola-Jahre zusammenfügen
+master_vola <- rbind(vola_2010, vola_2015, vola_2020, vola_2025)
+rownames(master_vola) <- NULL
+
 # als CSV speichern
 write.csv2(master_weights, "data/Portfolio_Gewichte_Master.csv", row.names = FALSE)
 write.csv2(master_summary, "data/Portfolio_Summary_Master.csv", row.names = FALSE)
+write.csv2(master_vola, "data/Portfolio_Volatilitat_Master.csv", row.names = FALSE)
 
 cat("Berechnung abgeschlossen. Daten wurden erfolgreich exportiert!\n")
 
