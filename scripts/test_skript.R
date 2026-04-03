@@ -1,1 +1,0 @@
-print("Hallo von Rechner 2!")
