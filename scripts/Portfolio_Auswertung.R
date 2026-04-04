@@ -31,7 +31,7 @@ df_fundamentals <- df_fundamentals %>%
     # Leerzeichenproblemlösung
     Aktie = make.names(NAME), 
     
-    # Kehrwert MTB = BTM
+    # Kehrwert MTB => BTM
     BookToMarket = 1 / as.numeric(MTBV)
   )
 
@@ -40,30 +40,34 @@ df_weights$Jahr <- as.character(df_weights$Jahr)
 df_fundamentals$Jahr <- as.character(df_fundamentals$Jahr)
 df_vola$Jahr <- as.character(df_vola$Jahr)
 
-# sämtliche meta und fundamentals anhand von Jahr und Aktie zusammenführen
-df_merged <- df_weights %>%
-  left_join(df_fundamentals, by = c("Jahr", "Aktie")) %>%
-  left_join(df_vola, by = c("Jahr", "Aktie"))
+# Titel aus der Vola-Tabelle mit den Fundamentals versehen
+# (diese enthält noch alle "gültigen" Aktien!)
+df_universe <- df_vola %>%
+  left_join(df_fundamentals, by = c("Jahr", "Aktie"))
 
-# Z-Scores berechnen
-df_zscores <- df_merged %>%
+# Aus den vier Universen werden die Verteilungsparameter ermittelt 
+df_universe_zscores <- df_universe %>%
+  # Gruppierung nach JAHR
   group_by(Jahr) %>%
   mutate(
-    # Size: MV - Market Value
+    # Size: MV
     Z_Size = as.numeric(scale(MV)),
     
     # Z-Score Value: BookToMarket
     Z_Value = as.numeric(scale(BookToMarket)),
     
-    # Z-Score Low Volitility: (annualisierte) Volatilität 
+    # Z-Score Low Volatility: (annualisierte) Volatilität 
     Z_LowVol = as.numeric(scale(Volatilitat)) * (-1)
   ) %>%
   ungroup()
 
+# Portfoliogewichte mit entsprechendem Universum zusammenfügen
+df_merged <- df_weights %>%
+  # left join: wichtig, da eine Aktie in mehreren Portfolios im Jahr sein kann!
+  left_join(df_universe_zscores, by = c("Jahr", "Aktie"))
 
-# 5. Portfolio-Exposures berechnen (Die Aggregation)
-# -------------------------------------------------------------------------
-df_exposures <- df_zscores %>%
+# gewichtete Exposures ermitteln
+df_exposures <- df_merged %>%
   group_by(Jahr, Portfolio_Typ) %>%
   summarise(
     Exp_Size = sum(Gewicht * Z_Size, na.rm = TRUE),
@@ -75,3 +79,13 @@ df_exposures <- df_zscores %>%
 
 # Ergebnis anzeigen
 print(head(df_exposures))
+
+
+
+
+
+
+
+
+
+

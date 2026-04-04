@@ -508,6 +508,7 @@ write.csv2(master_weights, "data/Portfolio_Gewichte_Master.csv", row.names = FAL
 write.csv2(master_summary, "data/Portfolio_Summary_Master.csv", row.names = FALSE)
 write.csv2(master_vola, "data/Portfolio_Volatilitat_Master.csv", row.names = FALSE)
 
+# Abschlussmeldung
 cat("Berechnung abgeschlossen. Daten wurden erfolgreich exportiert!\n")
 
 
