@@ -38,7 +38,7 @@ return_2015 <- read_excel("data/FTSE 100 FROM 2010 TO 2025.xlsx", sheet = "2015 
 return_2020 <- read_excel("data/FTSE 100 FROM 2010 TO 2025.xlsx", sheet = "2020 RETURN")
 return_2025 <- read_excel("data/FTSE 100 FROM 2010 TO 2025.xlsx", sheet = "2025 RETURN")
 
-# Datumspalte (erste Spalte) entfernen
+# Datumspalte (=erste Spalte) entfernen
 return_2010 <- return_2010[, -1]
 return_2015 <- return_2015[, -1] 
 return_2020 <- return_2020[, -1] 
@@ -117,6 +117,29 @@ extract_weights <- function(portfolio_result, return_df, year_label, port_label)
   rownames(df) <- NULL
   
   return(df)
+}
+
+# Funktion zur Berechnung des 12M-1M Momentum bei DAILY RETURNS
+calculate_momentum <- function(return_df) {
+  
+  n_days <- nrow(return_df)
+  
+  # letzte Zeile ist jüngstes Datum
+  # 252 - "heute" = 251
+  start_row <- max(1, n_days - 251) 
+  
+  # letzten 21 Tage (=1 Monat) wird ausgeschlossen
+  end_row <- max(1, n_days - 21)    
+  
+  # Dieser Zeitraum wird abgetrennt...
+  mom_data <- return_df[start_row:end_row, , drop = FALSE]
+  
+  # ... und davon die kummulierte Rendite berechnet = Momentum
+  mom_scores <- apply(mom_data, 2, function(x) {
+    prod(1 + x[!is.na(x)]) - 1
+  })
+  
+  return(mom_scores)
 }
 
 # Alle NA/0 - Funktionen auf alle vier Datensätze anwenden
@@ -503,10 +526,21 @@ vola_2025 <- data.frame(Jahr = "2025", Aktie = colnames(cov_matrix_2025), Volati
 master_vola <- rbind(vola_2010, vola_2015, vola_2020, vola_2025)
 rownames(master_vola) <- NULL
 
+# Momentum berechnen (Funktion auf alle Jahre)
+mom_2010 <- data.frame(Jahr = "2010", Aktie = colnames(return_2010), Momentum = as.numeric(calculate_momentum(return_2010)))
+mom_2015 <- data.frame(Jahr = "2015", Aktie = colnames(return_2015), Momentum = as.numeric(calculate_momentum(return_2015)))
+mom_2020 <- data.frame(Jahr = "2020", Aktie = colnames(return_2020), Momentum = as.numeric(calculate_momentum(return_2020)))
+mom_2025 <- data.frame(Jahr = "2025", Aktie = colnames(return_2025), Momentum = as.numeric(calculate_momentum(return_2025)))
+
+# Alle Momentum-Jahre zusammenfügen
+master_momentum <- rbind(mom_2010, mom_2015, mom_2020, mom_2025)
+rownames(master_momentum) <- NULL
+
 # als CSV speichern
 write.csv2(master_weights, "data/Portfolio_Gewichte_Master.csv", row.names = FALSE)
 write.csv2(master_summary, "data/Portfolio_Summary_Master.csv", row.names = FALSE)
 write.csv2(master_vola, "data/Portfolio_Volatilitat_Master.csv", row.names = FALSE)
+write.csv2(master_momentum, "data/Portfolio_Momentum_Master.csv", row.names = FALSE)
 
 # Abschlussmeldung
 cat("Berechnung abgeschlossen. Daten wurden erfolgreich exportiert!\n")
