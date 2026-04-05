@@ -1,4 +1,4 @@
-# libraries laden
+# libraries ladens
 library(tidyverse)  # Beinhaltet ggplot2 (Plotting), dplyr (Datenmanipulation), readr (CSV-Import)
 library(scales)     # für bessere Achsenbeschriftungen
 library(ggrepel)    # Text und Plots separat darstellen (keine visuelle Überschneidung)
@@ -9,6 +9,7 @@ library(readxl)     # Excel-Reader
 df_weights <- read_csv2("data/Portfolio_Gewichte_Master.csv")
 df_summary <- read_csv2("data/Portfolio_Summary_Master.csv")
 df_vola <- read_csv2("data/Portfolio_Volatilitat_Master.csv")
+df_momentum <- read_csv2("data/Portfolio_Momentum_Master.csv")
 meta_2010 <- read_excel("data/FTSE 100 FROM 2010 TO 2025.xlsx", sheet = "2010 META")
 meta_2015 <- read_excel("data/FTSE 100 FROM 2010 TO 2025.xlsx", sheet = "2015 META")
 meta_2020 <- read_excel("data/FTSE 100 FROM 2010 TO 2025.xlsx", sheet = "2020 META")
@@ -39,11 +40,14 @@ df_fundamentals <- df_fundamentals %>%
 df_weights$Jahr <- as.character(df_weights$Jahr)
 df_fundamentals$Jahr <- as.character(df_fundamentals$Jahr)
 df_vola$Jahr <- as.character(df_vola$Jahr)
+df_momentum$Jahr <- as.character(df_momentum$Jahr)
 
 # Titel aus der Vola-Tabelle mit den Fundamentals versehen
 # (diese enthält noch alle "gültigen" Aktien!)
 df_universe <- df_vola %>%
-  left_join(df_fundamentals, by = c("Jahr", "Aktie"))
+  left_join(df_fundamentals, by = c("Jahr", "Aktie")) %>%
+
+  left_join(df_momentum, by = c("Jahr", "Aktie"))
 
 # Aus den vier Universen werden die Verteilungsparameter ermittelt 
 df_universe_zscores <- df_universe %>%
@@ -57,7 +61,10 @@ df_universe_zscores <- df_universe %>%
     Z_Value = as.numeric(scale(BookToMarket)),
     
     # Z-Score Low Volatility: (annualisierte) Volatilität 
-    Z_LowVol = as.numeric(scale(Volatilitat)) * (-1)
+    Z_LowVol = as.numeric(scale(Volatilitat)) * (-1),
+    
+    # Z-Score Momentum: 12m-1m
+    Z_Momentum = as.numeric(scale(Momentum))
   ) %>%
   ungroup()
 
@@ -66,20 +73,32 @@ df_merged <- df_weights %>%
   # left join: wichtig, da eine Aktie in mehreren Portfolios im Jahr sein kann!
   left_join(df_universe_zscores, by = c("Jahr", "Aktie"))
 
-# gewichtete Exposures ermitteln
-df_exposures <- df_merged %>%
+# df für Stilfaktoren
+df_exposures_styles <- df_merged %>%
   group_by(Jahr, Portfolio_Typ) %>%
   summarise(
     Exp_Size = sum(Gewicht * Z_Size, na.rm = TRUE),
     Exp_Value = sum(Gewicht * Z_Value, na.rm = TRUE),
     Exp_LowVol = sum(Gewicht * Z_LowVol, na.rm = TRUE),
-    
+    Exp_Momentum = sum(Gewicht * Z_Momentum, na.rm = TRUE),
     .groups = "drop"
   )
 
-# Ergebnis anzeigen
-print(head(df_exposures))
+# df für Branchen
+df_exposures_branche <- df_merged %>%
+  group_by(Jahr, Portfolio_Typ, TR3N) %>%
+  summarise(
+    Gewicht_Prozent = sum(Gewicht, na.rm = TRUE),
+    .groups = "drop"
+  )
 
+# df für Regionen
+df_exposures_region <- df_merged %>%
+  group_by(Jahr, Portfolio_Typ, GEOGN) %>%
+  summarise(
+    Gewicht_Prozent = sum(Gewicht, na.rm = TRUE),
+    .groups = "drop"
+  )
 
 
 
