@@ -3,7 +3,7 @@ library(corpcor)
 library(readxl)
 library(quadprog)
 
-# V A R I A B L E N
+# VARIABLEN
 
 # Schwellenwert für die relative Anzahl von Nullen an Tagen, die mit "NA" ersetzt werden sollen
 thresh_zero_return <- 0.05
