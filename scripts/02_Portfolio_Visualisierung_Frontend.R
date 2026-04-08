@@ -301,12 +301,11 @@ plot_branche_grid <- ggplot(plot_data_branche, aes(x = Kategorie_Facet)) +
   scale_x_discrete(labels = function(x) str_wrap(gsub("^.*__", "", x), width = 20)) +
   
   scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
-  # Hier "plasma" statt "mako" für visuelle Abwechslung zu den Regionen
-  scale_fill_viridis_d(option = "plasma") + 
+  scale_fill_viridis_d(option = "mako") + 
   
   theme_minimal(base_size = 14) +
   theme(
-    axis.text.x = element_text(angle = 0, hjust = 0.5, face = "bold"),
+    axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 1, face = "bold"),
     legend.position = "bottom",
     strip.text = element_text(face = "bold", size = 14),
     panel.grid.major.x = element_blank()
@@ -323,7 +322,137 @@ print(plot_branche_grid)
 # Dateiexport
 # width schmaler machen (passend für die Word-Seitenbreite) und height massiv erhöhen
 ggsave("data/Plot_Branchen_Grid.png", plot = plot_branche_grid, width = 9, height = 10, dpi = 300)     
-       
+
+# =========================================================================
+# 3. SIZE
+# =========================================================================
+
+# 1. Daten isolieren
+plot_data_size <- df_exposures_styles %>%
+  select(Jahr, Portfolio_Typ, Exp_Size)
+
+# 2. Portfolios sortieren (Risiko aufsteigend)
+portfolio_order <- c("Min Variance", "Target Vol 10%", "Target Vol 12%", "Target Vol 15%", 
+                     "Target Ret 12%", "Target Ret 15%", "Target Ret 18%")
+plot_data_size$Portfolio_Typ <- factor(plot_data_size$Portfolio_Typ, levels = portfolio_order)
+
+# 3. Der Size-Plot
+plot_size <- ggplot(plot_data_size, aes(x = Portfolio_Typ, y = Exp_Size, fill = Portfolio_Typ)) +
+  
+  # Balken einzeichnen
+  geom_col(color = "black", linewidth = 0.2, alpha = 0.9) +
+  
+  # Die Nulllinie (Benchmark/Marktdurchschnitt) stark rot hervorheben
+  geom_hline(yintercept = 0, color = "red", linewidth = 1) +
+  
+  # Wieder das 4-Jahres-Grid im Hochformat
+  facet_wrap(~ Jahr, ncol = 1) +
+  
+  scale_fill_viridis_d(option = "mako") + 
+  
+  theme_minimal(base_size = 14) +
+  theme(
+    # Text leicht schräg, damit "Target Vol..." gut hinpasst
+    axis.text.x = element_text(angle = 30, hjust = 0.5, vjust = 1, face = "bold"),
+    legend.position = "none", # Keine Legende nötig, da Namen schon auf der X-Achse stehen
+    strip.text = element_text(face = "bold", size = 14),
+    panel.grid.major.x = element_blank()
+  ) +
+  labs(
+    title = "Stilfaktor-Exposure: Size (Marktkapitalisierung)",
+    subtitle = "Z-Scores (Rote Linie = 0 = Mittelwert | > 0 Large Cap | < 0 Small Cap)",
+    x = NULL,
+    y = "Exposure (Z-Score)"
+  )
+
+print(plot_size)
+# Dateiexport im gleichen Hochformat wie Branchen
+ggsave("data/Plot_Factor_Size.png", plot = plot_size, width = 9, height = 10, dpi = 300)
+
+# =========================================================================
+# 4. VALUE
+# =========================================================================
+plot_data_value <- df_exposures_styles %>% select(Jahr, Portfolio_Typ, Exp_Value)
+plot_data_value$Portfolio_Typ <- factor(plot_data_value$Portfolio_Typ, levels = portfolio_order)
+
+plot_value <- ggplot(plot_data_value, aes(x = Portfolio_Typ, y = Exp_Value, fill = Portfolio_Typ)) +
+  geom_col(color = "black", linewidth = 0.2, alpha = 0.9) +
+  geom_hline(yintercept = 0, color = "red", linewidth = 1) +
+  facet_wrap(~ Jahr, ncol = 1) +
+  scale_fill_viridis_d(option = "mako") + 
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.text.x = element_text(angle = 30, hjust = 0.5, vjust = 1, face = "bold"),
+    legend.position = "none",
+    strip.text = element_text(face = "bold", size = 14),
+    panel.grid.major.x = element_blank()
+  ) +
+  labs(
+    title = "Stilfaktor-Exposure: Value (Book-to-Market)",
+    subtitle = "Z-Scores (Rote Linie = 0 = Mittelwert | > 0 Value-Fokus | < 0 Growth-Fokus)",
+    x = NULL, y = "Exposure (Z-Score)"
+  )
+
+print(plot_value)
+ggsave("data/Plot_Factor_Value.png", plot = plot_value, width = 9, height = 10, dpi = 300)
+
+# =========================================================================
+# 5. Momentum
+# =========================================================================
+plot_data_mom <- df_exposures_styles %>% select(Jahr, Portfolio_Typ, Exp_Momentum)
+plot_data_mom$Portfolio_Typ <- factor(plot_data_mom$Portfolio_Typ, levels = portfolio_order)
+
+plot_mom <- ggplot(plot_data_mom, aes(x = Portfolio_Typ, y = Exp_Momentum, fill = Portfolio_Typ)) +
+  geom_col(color = "black", linewidth = 0.2, alpha = 0.9) +
+  geom_hline(yintercept = 0, color = "red", linewidth = 1) +
+  facet_wrap(~ Jahr, ncol = 1) +
+  scale_fill_viridis_d(option = "mako") + 
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.text.x = element_text(angle = 30, hjust = 0.5, vjust = 1, face = "bold"),
+    legend.position = "none",
+    strip.text = element_text(face = "bold", size = 14),
+    panel.grid.major.x = element_blank()
+  ) +
+  labs(
+    title = "Stilfaktor-Exposure: Momentum (12m - 1m)",
+    subtitle = "Z-Scores (Rote Linie = 0 = Mittelwert | > 0 Gewinner-Aktien | < 0 Verlierer-Aktien)",
+    x = NULL, y = "Exposure (Z-Score)"
+  )
+
+print(plot_mom)
+ggsave("data/Plot_Factor_Momentum.png", plot = plot_mom, width = 9, height = 10, dpi = 300)
+
+# =========================================================================
+# 6. Low Volatility
+# =========================================================================
+plot_data_lowvol <- df_exposures_styles %>% select(Jahr, Portfolio_Typ, Exp_LowVol)
+plot_data_lowvol$Portfolio_Typ <- factor(plot_data_lowvol$Portfolio_Typ, levels = portfolio_order)
+
+plot_lowvol <- ggplot(plot_data_lowvol, aes(x = Portfolio_Typ, y = Exp_LowVol, fill = Portfolio_Typ)) +
+  geom_col(color = "black", linewidth = 0.2, alpha = 0.9) +
+  geom_hline(yintercept = 0, color = "red", linewidth = 1) +
+  facet_wrap(~ Jahr, ncol = 1) +
+  scale_fill_viridis_d(option = "mako") + 
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.text.x = element_text(angle = 30, hjust = 0.5, vjust = 1, face = "bold"),
+    legend.position = "none",
+    strip.text = element_text(face = "bold", size = 14),
+    panel.grid.major.x = element_blank()
+  ) +
+  labs(
+    title = "Stilfaktor-Exposure: Low Volatility",
+    subtitle = "Z-Scores (Rote Linie = 0 = Mittelwert | > 0 Risikoärmer als Mittelwert | < 0 Riskanter)",
+    x = NULL, y = "Exposure (Z-Score)"
+  )
+
+print(plot_lowvol)
+ggsave("data/Plot_Factor_LowVol.png", plot = plot_lowvol, width = 9, height = 10, dpi = 300)
+
+
+
+
        
        
        
