@@ -111,12 +111,6 @@ df_exposures_region <- df_merged %>%
 
 # VISUALISIERUNGEN
 
-# 1) Regionen
-
-
-
-
-
 # =========================================================================
 # 1. REGIONEN
 # =========================================================================
@@ -163,12 +157,12 @@ plot_data_region <- expand_grid(
   left_join(df_port_plot, by = c("Jahr", "Kategorie", "Portfolio_Typ")) %>%
   mutate(Gewicht_Prozent = replace_na(Gewicht_Prozent, 0))
 
-# 5. Sortierungen für das Diagramm festlegen
+# Sortierungen für das Diagramm festlegen
 portfolio_order <- c("Min Variance", "Target Vol 10%", "Target Vol 12%", "Target Vol 15%", 
                      "Target Ret 12%", "Target Ret 15%", "Target Ret 18%")
 plot_data_region$Portfolio_Typ <- factor(plot_data_region$Portfolio_Typ, levels = portfolio_order)
 
-# ---> NEU: Dynamische Sortierung PRO JAHR (Facet-Trick) <---
+# Dynamische Sortierung PRO JAHR
 # Zuerst die absolute Summe der Portfoliogewichte pro Region und Jahr berechnen
 plot_data_region <- plot_data_region %>%
   group_by(Jahr, Kategorie) %>%
@@ -179,16 +173,15 @@ plot_data_region <- plot_data_region %>%
 plot_data_region <- plot_data_region %>%
   mutate(Summe_Gewicht_Jahr = ifelse(Kategorie == "Sonstige", -Inf, Summe_Gewicht_Jahr))
 
-# Um pro Jahr individuell sortieren zu können, bauen wir eine Hilfsspalte: "Jahr__Kategorie"
+# Um pro Jahr individuell sortieren zu können, wird die Hilfsspalte: "Jahr__Kategorie" hinzugefügt
 plot_data_region <- plot_data_region %>%
   mutate(Kategorie_Facet = paste(Jahr, Kategorie, sep = "__"))
 
-# Jetzt sortieren wir diese Hilfsspalte absteigend (-) nach der berechneten Summe
+# nach Hilfsspalte absteigend sortieren
 plot_data_region$Kategorie_Facet <- reorder(plot_data_region$Kategorie_Facet, -plot_data_region$Summe_Gewicht_Jahr)
 
-
-# 6. Der finale Plot
-plot_region_grid <- ggplot(plot_data_region, aes(x = Kategorie_Facet)) +  # Hier die Hilfsspalte nutzen!
+# finale Plot
+plot_region_grid <- ggplot(plot_data_region, aes(x = Kategorie_Facet)) +
   
   geom_col(aes(y = Gewicht_Prozent, fill = Portfolio_Typ), 
            position = position_dodge(width = 0.85), 
@@ -197,9 +190,8 @@ plot_region_grid <- ggplot(plot_data_region, aes(x = Kategorie_Facet)) +  # Hier
   geom_errorbar(aes(ymin = Index_Gewicht, ymax = Index_Gewicht), 
                 color = "red", linewidth = 1, width = 0.85) +
   
-  facet_wrap(~ Jahr, ncol = 2, scales = "free_x") +
+  facet_wrap(~ Jahr, ncol = 1, scales = "free_x") +
   
-  # ---> NEU: Das künstliche "__" wieder sauber abschneiden <---
   scale_x_discrete(labels = function(x) gsub("^.*__", "", x)) +
   
   scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
@@ -207,13 +199,13 @@ plot_region_grid <- ggplot(plot_data_region, aes(x = Kategorie_Facet)) +  # Hier
   
   theme_minimal(base_size = 14) +
   theme(
-    axis.text.x = element_text(angle = 30, hjust = 1, face = "bold"),
+    axis.text.x = element_text(angle = 0, hjust = 0.5, face = "bold"),
     legend.position = "bottom",
     strip.text = element_text(face = "bold", size = 14),
     panel.grid.major.x = element_blank()
   ) +
   labs(
-    title = "Regionale Portfolio-Allokation vs. Benchmark",
+    title = "Regionale Portfolio-Allokation vs. Index",
     subtitle = "Top 4 Regionen im Portfolio + 'Sonstige' (Sortiert nach Portfoliogewicht)",
     x = NULL,
     y = "Anteil am Portfolio / Index",
@@ -222,15 +214,115 @@ plot_region_grid <- ggplot(plot_data_region, aes(x = Kategorie_Facet)) +  # Hier
 
 print(plot_region_grid)
 # Dateiexport
-ggsave("data/Plot_Regionen_Grid.png", plot = plot_region_grid, width = 14, height = 8, dpi = 300) 
-       
-       
-       
-       
-       
-       
-       
-       
+ggsave("data/Plot_Regionen_Grid.png", plot = plot_region_grid, width = 9, height = 10, dpi = 300) 
+
+# =========================================================================
+# 2. BRANCHEN
+# =========================================================================
+
+# Benchmark-Gewichte vom Index für ALLE Branchen nach MV berechnen (für Sortierung)
+df_benchmark_branche <- df_universe %>%
+  group_by(Jahr, TR3N) %>%
+  # MV pro Jahr und Branche addieren
+  summarise(Branche_MV = sum(MV, na.rm = TRUE), .groups = "drop_last") %>%
+  # Branchen-MV durch Summe ergibt den relativen Anteil einer Branche pro Jahr
+  mutate(Index_Gewicht = Branche_MV / sum(Branche_MV, na.rm = TRUE)) %>%
+  ungroup()
+
+# Top 4 Branchen aus den Portfolios PRO JAHR GESAMT ermitteln
+top4_branchen_per_year <- df_exposures_branche %>%
+  group_by(Jahr, TR3N) %>%
+  # Summen pro Jahr und Branche bilden
+  summarise(Gesamt_Portfolio_Gewicht = sum(Gewicht_Prozent, na.rm = TRUE), .groups = "drop_last") %>%
+  # die 4 stärksten Branchen nach Anteil absteigend ordnen
+  slice_max(order_by = Gesamt_Portfolio_Gewicht, n = 4) %>%
+  select(Jahr, TR3N) %>%
+  mutate(Kategorie = TR3N) 
+
+# Gesamtgewichte zu Branchen zuordnen und "Sonstige" (=alles nach den 4 größten) einfügen
+df_bench_plot_branche <- df_benchmark_branche %>%
+  # alle die nicht zu den Top 4 gehören werden als NA bzw. Sonstige bezeichnet
+  left_join(top4_branchen_per_year, by = c("Jahr", "TR3N")) %>%
+  mutate(Kategorie = replace_na(Kategorie, "Sonstige")) %>%
+  group_by(Jahr, Kategorie) %>%
+  summarise(Index_Gewicht = sum(Index_Gewicht, na.rm = TRUE), .groups = "drop")
+
+# nochmal Gesamtgewichte zu Branchen zuordnen für Portfolios
+df_port_plot_branche <- df_exposures_branche %>%
+  left_join(top4_branchen_per_year, by = c("Jahr", "TR3N")) %>%
+  mutate(Kategorie = replace_na(Kategorie, "Sonstige")) %>%
+  group_by(Jahr, Portfolio_Typ, Kategorie) %>%
+  summarise(Gewicht_Prozent = sum(Gewicht_Prozent, na.rm = TRUE), .groups = "drop")
+
+# Gewichte mit Jahr versehen damit 4 Gruppen/Summen gebildet werden können
+plot_data_branche <- expand_grid(
+  df_bench_plot_branche,
+  Portfolio_Typ = unique(df_port_plot_branche$Portfolio_Typ)
+) %>%
+  left_join(df_port_plot_branche, by = c("Jahr", "Kategorie", "Portfolio_Typ")) %>%
+  mutate(Gewicht_Prozent = replace_na(Gewicht_Prozent, 0))
+
+# Sortierungen für das Diagramm festlegen
+portfolio_order <- c("Min Variance", "Target Vol 10%", "Target Vol 12%", "Target Vol 15%", 
+                     "Target Ret 12%", "Target Ret 15%", "Target Ret 18%")
+plot_data_branche$Portfolio_Typ <- factor(plot_data_branche$Portfolio_Typ, levels = portfolio_order)
+
+# Dynamische Sortierung PRO JAHR
+# Zuerst die absolute Summe der Portfoliogewichte pro Branche und Jahr berechnen
+plot_data_branche <- plot_data_branche %>%
+  group_by(Jahr, Kategorie) %>%
+  mutate(Summe_Gewicht_Jahr = sum(Gewicht_Prozent, na.rm = TRUE)) %>%
+  ungroup()
+
+# "Sonstige" zwingend ans Ende setzen (fiktiv sehr negative Summe)
+plot_data_branche <- plot_data_branche %>%
+  mutate(Summe_Gewicht_Jahr = ifelse(Kategorie == "Sonstige", -Inf, Summe_Gewicht_Jahr))
+
+# Um pro Jahr individuell sortieren zu können, wird die Hilfsspalte: "Jahr__Kategorie" hinzugefügt
+plot_data_branche <- plot_data_branche %>%
+  mutate(Kategorie_Facet = paste(Jahr, Kategorie, sep = "__"))
+
+# nach Hilfsspalte absteigend sortieren
+plot_data_branche$Kategorie_Facet <- reorder(plot_data_branche$Kategorie_Facet, -plot_data_branche$Summe_Gewicht_Jahr)
+
+# finale Plot
+plot_branche_grid <- ggplot(plot_data_branche, aes(x = Kategorie_Facet)) +
+  
+  geom_col(aes(y = Gewicht_Prozent, fill = Portfolio_Typ), 
+           position = position_dodge(width = 0.85), 
+           color = "black", linewidth = 0.2, alpha = 0.9) +
+  
+  geom_errorbar(aes(ymin = Index_Gewicht, ymax = Index_Gewicht), 
+                color = "red", linewidth = 1, width = 0.85) +
+  
+  facet_wrap(~ Jahr, ncol = 1, scales = "free_x") +
+  
+  # gsub schneidet das Jahr ab, str_wrap bricht den Text nach ca. 15 Zeichen in eine neue Zeile um
+  scale_x_discrete(labels = function(x) str_wrap(gsub("^.*__", "", x), width = 20)) +
+  
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  # Hier "plasma" statt "mako" für visuelle Abwechslung zu den Regionen
+  scale_fill_viridis_d(option = "plasma") + 
+  
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.text.x = element_text(angle = 0, hjust = 0.5, face = "bold"),
+    legend.position = "bottom",
+    strip.text = element_text(face = "bold", size = 14),
+    panel.grid.major.x = element_blank()
+  ) +
+  labs(
+    title = "Sektorale Portfolio-Allokation vs. Index",
+    subtitle = "Top 4 Branchen im Portfolio + 'Sonstige' (Sortiert nach Portfoliogewicht)",
+    x = NULL,
+    y = "Anteil am Portfolio / Index",
+    fill = "Portfolio:"
+  )
+
+print(plot_branche_grid)
+# Dateiexport
+# width schmaler machen (passend für die Word-Seitenbreite) und height massiv erhöhen
+ggsave("data/Plot_Branchen_Grid.png", plot = plot_branche_grid, width = 9, height = 10, dpi = 300)     
        
        
        
