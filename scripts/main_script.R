@@ -264,7 +264,7 @@ target_vola_portfolio <- function(mu, Sigma, target_vol) {
   
   # Sicherheitsprüfung ob Zielrisiko erreichbar ist, wenn nicht -> Fehlermeldung
   if(target_vol < mvp$risk) {
-    warning(paste("Zielrisiko", round(target_vol*100,2), "% ist zu gering! Das absolut niedrigste Risiko am Markt ist", round(mvp$risk*100,2), "%. Gebe Minimum-Varianz-Portfolio zurück."))
+    warning(paste("Zielrisiko", round(target_vol*100,2), "% ist zu gering! Das niedrigste Risiko möglich ist", round(mvp$risk*100,2), "%. Gebe Minimum-Varianz-Portfolio zurück."))
     return(mvp)
   }
   

@@ -118,40 +118,44 @@ df_exposures_region <- df_merged %>%
 
 
 # =========================================================================
-# 5. VISUALISIERUNG: REGIONEN (Top 4 PORTFOLIO-Regionen + Sonstige, sortiert)
+# 1. REGIONEN
 # =========================================================================
 
-# 1. Benchmark-Gewichte (Index) für ALLE Regionen berechnen
+# Benchmark-Gewichte vom Index für ALLE Regionen nach MV berechnen (für Sortierung)
 df_benchmark_region <- df_universe %>%
-  filter(!is.na(GEOGN)) %>% 
   group_by(Jahr, GEOGN) %>%
+  # MV pro Jahr und Region addieren
   summarise(Region_MV = sum(MV, na.rm = TRUE), .groups = "drop_last") %>%
+  # Region-MV durch Summe ergibt den relativen Anteil einer Region pro Jahr
   mutate(Index_Gewicht = Region_MV / sum(Region_MV, na.rm = TRUE)) %>%
   ungroup()
 
-# 2. ---> NEU: Top 4 Regionen ermitteln <---
+# Top 4 Regionen aus den Portfolios PRO JAHR GESAMT ermitteln
 top4_regions_per_year <- df_exposures_region %>%
   group_by(Jahr, GEOGN) %>%
+  # Summen pro Jahr und Region bilden
   summarise(Gesamt_Portfolio_Gewicht = sum(Gewicht_Prozent, na.rm = TRUE), .groups = "drop_last") %>%
-  # Nimm die 4 stärksten Regionen
+  # die 4 stärksten Regionen nach Anteil absteigend ordnen
   slice_max(order_by = Gesamt_Portfolio_Gewicht, n = 4) %>%
   select(Jahr, GEOGN) %>%
   mutate(Kategorie = GEOGN) 
 
-# 3. Daten für den Plot MAPPEN ("Sonstige" einführen)
+# Gesamtgewichte zu Regionen zuordnen und "Sonstige" (=alles nach den 4 größten) einfügen
 df_bench_plot <- df_benchmark_region %>%
+  # alle die nicht zu den Top 4 gehören werden als NA bzw. Sonstige bezeichnet
   left_join(top4_regions_per_year, by = c("Jahr", "GEOGN")) %>%
   mutate(Kategorie = replace_na(Kategorie, "Sonstige")) %>%
   group_by(Jahr, Kategorie) %>%
   summarise(Index_Gewicht = sum(Index_Gewicht, na.rm = TRUE), .groups = "drop")
 
+# nochmal Gesamtgewichte zu Regionen zuordnen für Portfolios
 df_port_plot <- df_exposures_region %>%
   left_join(top4_regions_per_year, by = c("Jahr", "GEOGN")) %>%
   mutate(Kategorie = replace_na(Kategorie, "Sonstige")) %>%
   group_by(Jahr, Portfolio_Typ, Kategorie) %>%
   summarise(Gewicht_Prozent = sum(Gewicht_Prozent, na.rm = TRUE), .groups = "drop")
 
-# 4. Zusammenführen (expand_grid zwingt leere Balken auf 0%)
+# Gewichte mit Jahr versehen damit 4 Gruppen/Summen gebildet werden können
 plot_data_region <- expand_grid(
   df_bench_plot,
   Portfolio_Typ = unique(df_port_plot$Portfolio_Typ)
@@ -160,30 +164,31 @@ plot_data_region <- expand_grid(
   mutate(Gewicht_Prozent = replace_na(Gewicht_Prozent, 0))
 
 # 5. Sortierungen für das Diagramm festlegen
-# Risiko-Reihenfolge der Portfolios (Farben)
 portfolio_order <- c("Min Variance", "Target Vol 10%", "Target Vol 12%", "Target Vol 15%", 
                      "Target Ret 12%", "Target Ret 15%", "Target Ret 18%")
 plot_data_region$Portfolio_Typ <- factor(plot_data_region$Portfolio_Typ, levels = portfolio_order)
 
-
-# ---> NEU: Sortierung der X-Achse vorbereiten <---
-# Um innerhalb der Jahre flexibel nach Größe zu sortieren, berechnen wir die durchschnittliche 
-# Größe jeder Kategorie pro Jahr und nutzen das zum Sortieren im Plot.
+# ---> NEU: Dynamische Sortierung PRO JAHR (Facet-Trick) <---
+# Zuerst die absolute Summe der Portfoliogewichte pro Region und Jahr berechnen
 plot_data_region <- plot_data_region %>%
   group_by(Jahr, Kategorie) %>%
-  mutate(Sortier_Gewicht = mean(Gewicht_Prozent)) %>% # Nach durchschnittlichem Portfolio-Gewicht sortieren
+  mutate(Summe_Gewicht_Jahr = sum(Gewicht_Prozent, na.rm = TRUE)) %>%
   ungroup()
 
-# Wir müssen sicherstellen, dass "Sonstige" immer einen künstlich niedrigen Wert bekommt, 
-# damit es ganz rechts landet, egal wie groß es wirklich ist.
+# "Sonstige" zwingend ans Ende setzen (fiktiv sehr negative Summe)
 plot_data_region <- plot_data_region %>%
-  mutate(Sortier_Gewicht = ifelse(Kategorie == "Sonstige", -1, Sortier_Gewicht))
+  mutate(Summe_Gewicht_Jahr = ifelse(Kategorie == "Sonstige", -Inf, Summe_Gewicht_Jahr))
+
+# Um pro Jahr individuell sortieren zu können, bauen wir eine Hilfsspalte: "Jahr__Kategorie"
+plot_data_region <- plot_data_region %>%
+  mutate(Kategorie_Facet = paste(Jahr, Kategorie, sep = "__"))
+
+# Jetzt sortieren wir diese Hilfsspalte absteigend (-) nach der berechneten Summe
+plot_data_region$Kategorie_Facet <- reorder(plot_data_region$Kategorie_Facet, -plot_data_region$Summe_Gewicht_Jahr)
 
 
 # 6. Der finale Plot
-plot_region_grid <- ggplot(plot_data_region, 
-                           # reorder() sortiert 'Kategorie' absteigend (-) nach 'Sortier_Gewicht'
-                           aes(x = reorder(Kategorie, -Sortier_Gewicht))) +
+plot_region_grid <- ggplot(plot_data_region, aes(x = Kategorie_Facet)) +  # Hier die Hilfsspalte nutzen!
   
   geom_col(aes(y = Gewicht_Prozent, fill = Portfolio_Typ), 
            position = position_dodge(width = 0.85), 
@@ -192,8 +197,10 @@ plot_region_grid <- ggplot(plot_data_region,
   geom_errorbar(aes(ymin = Index_Gewicht, ymax = Index_Gewicht), 
                 color = "red", linewidth = 1, width = 0.85) +
   
-  # scales = "free_x" erlaubt, dass jedes Jahr seine eigene X-Achse (und Sortierung) hat
   facet_wrap(~ Jahr, ncol = 2, scales = "free_x") +
+  
+  # ---> NEU: Das künstliche "__" wieder sauber abschneiden <---
+  scale_x_discrete(labels = function(x) gsub("^.*__", "", x)) +
   
   scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
   scale_fill_viridis_d(option = "mako") + 
@@ -207,11 +214,24 @@ plot_region_grid <- ggplot(plot_data_region,
   ) +
   labs(
     title = "Regionale Portfolio-Allokation vs. Benchmark",
-    subtitle = "Top 4 Regionen im Portfolio + 'Sonstige' (Rote Linie = Indexgewicht)",
+    subtitle = "Top 4 Regionen im Portfolio + 'Sonstige' (Sortiert nach Portfoliogewicht)",
     x = NULL,
     y = "Anteil am Portfolio / Index",
     fill = "Portfolio:"
   )
 
 print(plot_region_grid)
-ggsave("data/Plot_Regionen_Grid.png", plot = plot_region_grid, width = 14, height = 8, dpi = 300)
+# Dateiexport
+ggsave("data/Plot_Regionen_Grid.png", plot = plot_region_grid, width = 14, height = 8, dpi = 300) 
+       
+       
+       
+       
+       
+       
+       
+       
+       
+       
+       
+       
