@@ -165,7 +165,7 @@ cov_matrix_2015 <- make.positive.definite(cov_matrix_2015)
 cov_matrix_2020 <- make.positive.definite(cov_matrix_2020)
 cov_matrix_2025 <- make.positive.definite(cov_matrix_2025)
 
-# historische, annualisierte Erwartungswerte sämtlicher Aktien
+# historische, diskrete, annualisierte Erwartungswerte sämtlicher Aktien
 exp_return_2010 <- colMeans(return_2010, na.rm = TRUE) * 252
 exp_return_2015 <- colMeans(return_2015, na.rm = TRUE) * 252
 exp_return_2020 <- colMeans(return_2020, na.rm = TRUE) * 252
