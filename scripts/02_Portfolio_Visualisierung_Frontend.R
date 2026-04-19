@@ -10,10 +10,10 @@ df_weights <- read_csv2("data/Portfolio_Gewichte_Master.csv")
 df_summary <- read_csv2("data/Portfolio_Summary_Master.csv")
 df_vola <- read_csv2("data/Portfolio_Volatilitat_Master.csv")
 df_momentum <- read_csv2("data/Portfolio_Momentum_Master.csv")
-meta_2010 <- read_excel("data/CUSTOM TEST FROM 2010 TO 2025.xlsx", sheet = "2010 META")
-meta_2015 <- read_excel("data/CUSTOM TEST FROM 2010 TO 2025.xlsx", sheet = "2015 META")
-meta_2020 <- read_excel("data/CUSTOM TEST FROM 2010 TO 2025.xlsx", sheet = "2020 META")
-meta_2025 <- read_excel("data/CUSTOM TEST FROM 2010 TO 2025.xlsx", sheet = "2025 META")
+meta_2010 <- read_excel("data/S&P500 FROM 2010 TO 2025.xlsx", sheet = "2010 META")
+meta_2015 <- read_excel("data/S&P500 FROM 2010 TO 2025.xlsx", sheet = "2015 META")
+meta_2020 <- read_excel("data/S&P500 FROM 2010 TO 2025.xlsx", sheet = "2020 META")
+meta_2025 <- read_excel("data/S&P500 FROM 2010 TO 2025.xlsx", sheet = "2025 META")
 
 # 'X(MV)~USD in MV umbenennen (Sonderzeichen Problem)
 # "Jahr"-Spalte hinzufügen für das spätere Zuordnen nach dem merge (+ numeric erzwingen wg NAs)
@@ -353,7 +353,7 @@ plot_size <- ggplot(plot_data_size, aes(x = Portfolio_Typ, y = Exp_Size, fill = 
   theme_minimal(base_size = 14) +
   theme(
     # Text leicht schräg, damit "Target Vol..." gut hinpasst
-    axis.text.x = element_text(angle = 30, hjust = 0.5, vjust = 1, face = "bold"),
+    axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1, face = "bold"),
     legend.position = "none", # Keine Legende nötig, da Namen schon auf der X-Achse stehen
     strip.text = element_text(face = "bold", size = 14),
     panel.grid.major.x = element_blank()
@@ -382,7 +382,7 @@ plot_value <- ggplot(plot_data_value, aes(x = Portfolio_Typ, y = Exp_Value, fill
   scale_fill_viridis_d(option = "mako") + 
   theme_minimal(base_size = 14) +
   theme(
-    axis.text.x = element_text(angle = 30, hjust = 0.5, vjust = 1, face = "bold"),
+    axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1, face = "bold"),
     legend.position = "none",
     strip.text = element_text(face = "bold", size = 14),
     panel.grid.major.x = element_blank()
@@ -409,7 +409,7 @@ plot_mom <- ggplot(plot_data_mom, aes(x = Portfolio_Typ, y = Exp_Momentum, fill 
   scale_fill_viridis_d(option = "mako") + 
   theme_minimal(base_size = 14) +
   theme(
-    axis.text.x = element_text(angle = 30, hjust = 0.5, vjust = 1, face = "bold"),
+    axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1, face = "bold"),
     legend.position = "none",
     strip.text = element_text(face = "bold", size = 14),
     panel.grid.major.x = element_blank()
@@ -436,7 +436,7 @@ plot_lowvol <- ggplot(plot_data_lowvol, aes(x = Portfolio_Typ, y = Exp_LowVol, f
   scale_fill_viridis_d(option = "mako") + 
   theme_minimal(base_size = 14) +
   theme(
-    axis.text.x = element_text(angle = 30, hjust = 0.5, vjust = 1, face = "bold"),
+    axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1, face = "bold"),
     legend.position = "none",
     strip.text = element_text(face = "bold", size = 14),
     panel.grid.major.x = element_blank()

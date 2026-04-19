@@ -9,11 +9,11 @@ library(quadprog)
 thresh_zero_return <- 0.05
 
 # Schwellenewert für die relative Anzahl von Renditen pro Aktie die vorhanden sein müssen
-thresh_valid_returns <- 0.25
+thresh_valid_returns <- 0.4
 
 # Anzahl der ermittelten Portfolios auf der Effizienzlinie (für Portfolios mit Zielrisiko)
 # zwischen min var Portfolio und max. Rendite Portfolio
-num_port_eff <- 100
+num_port_eff <- 10
 
 # Zielrenditen für Portfolios
 target_ret_a <- 0.12
@@ -29,14 +29,14 @@ target_vol_c <- 0.15
 min_share_weight <- 0.0001
 
 # Daten laden
-meta_2010 <- read_excel("data/CUSTOM TEST FROM 2010 TO 2025.xlsx", sheet = "2010 META")
-meta_2015 <- read_excel("data/CUSTOM TEST FROM 2010 TO 2025.xlsx", sheet = "2015 META")
-meta_2020 <- read_excel("data/CUSTOM TEST FROM 2010 TO 2025.xlsx", sheet = "2020 META")
-meta_2025 <- read_excel("data/CUSTOM TEST FROM 2010 TO 2025.xlsx", sheet = "2025 META")
-return_2010 <- read_excel("data/CUSTOM TEST FROM 2010 TO 2025.xlsx", sheet = "2010 RETURN")
-return_2015 <- read_excel("data/CUSTOM TEST FROM 2010 TO 2025.xlsx", sheet = "2015 RETURN")
-return_2020 <- read_excel("data/CUSTOM TEST FROM 2010 TO 2025.xlsx", sheet = "2020 RETURN")
-return_2025 <- read_excel("data/CUSTOM TEST FROM 2010 TO 2025.xlsx", sheet = "2025 RETURN")
+meta_2010 <- read_excel("data/S&P500 FROM 2010 TO 2025.xlsx", sheet = "2010 META")
+meta_2015 <- read_excel("data/S&P500 FROM 2010 TO 2025.xlsx", sheet = "2015 META")
+meta_2020 <- read_excel("data/S&P500 FROM 2010 TO 2025.xlsx", sheet = "2020 META")
+meta_2025 <- read_excel("data/S&P500 FROM 2010 TO 2025.xlsx", sheet = "2025 META")
+return_2010 <- read_excel("data/S&P500 FROM 2010 TO 2025.xlsx", sheet = "2010 RETURN")
+return_2015 <- read_excel("data/S&P500 FROM 2010 TO 2025.xlsx", sheet = "2015 RETURN")
+return_2020 <- read_excel("data/S&P500 FROM 2010 TO 2025.xlsx", sheet = "2020 RETURN")
+return_2025 <- read_excel("data/S&P500 FROM 2010 TO 2025.xlsx", sheet = "2025 RETURN")
 
 # Datumspalte (=erste Spalte) entfernen
 return_2010 <- return_2010[, -1]
@@ -152,6 +152,32 @@ return_2010 <- filter_stocks_by_na(return_2010, thresh_valid_returns)
 return_2015 <- filter_stocks_by_na(return_2015, thresh_valid_returns)
 return_2020 <- filter_stocks_by_na(return_2020, thresh_valid_returns)
 return_2025 <- filter_stocks_by_na(return_2025, thresh_valid_returns)
+
+# Daten bereinigen: Tage mit mind. 1xNA werden gelöscht
+return_2010_cc <- na.omit(return_2010)
+return_2015_cc <- na.omit(return_2015)
+return_2020_cc <- na.omit(return_2020)
+return_2025_cc <- na.omit(return_2025)
+
+# Übersichtstabelle für den Datenverlust erstellen
+robustness_summary <- data.frame(
+  Jahr = c("2010", "2015", "2020", "2025"),
+  Verbleibende_Tage = c(nrow(return_2010_cc), nrow(return_2015_cc), nrow(return_2020_cc), nrow(return_2025_cc)),
+  Gesamte_Tage = c(nrow(return_2010), nrow(return_2015), nrow(return_2020), nrow(return_2025))
+)
+
+# Prozentualen Verlust berechnen
+robustness_summary$Verlust_Prozent <- round(100 - (robustness_summary$Verbleibende_Tage / robustness_summary$Gesamte_Tage * 100), 2)
+
+# Tabelle in der Konsole anzeigen (und im Environment von RStudio abrufbar)
+print("--- ROBUSTHEITSCHECK: DATENVERLUST DURCH NA.OMIT ---")
+print(robustness_summary)
+
+# Alternative (na.omit) Kovarianzmatrizen berechnen
+cov_matrix_2010_cc <- cov(return_2010_cc) * 252
+cov_matrix_2015_cc <- cov(return_2015_cc) * 252
+cov_matrix_2020_cc <- cov(return_2020_cc) * 252
+cov_matrix_2025_cc <- cov(return_2025_cc) * 252
 
 # Kovarianzmatrizen nur mit "kompletten/vorhandenen" Zahlenpaare berechnen (annualisiert)
 cov_matrix_2010 <- cov(return_2010, use = "pairwise.complete.obs") * 252
@@ -544,6 +570,57 @@ write.csv2(master_momentum, "data/Portfolio_Momentum_Master.csv", row.names = FA
 
 # Abschlussmeldung
 cat("Berechnung abgeschlossen. Daten wurden erfolgreich exportiert!\n")
+
+# Available-Case vs. Complete-Case (na.omit)
+# Exemplarisch für das min-var-portfolio aus 2025
+
+cat("\nStarte Gewichtevergleich für 2025...\n")
+
+# neue Erwartungswerte für die CC-Datene berechnen
+exp_return_2025_cc <- colMeans(return_2025_cc) * 252
+
+# Min-Var-Portfolio mit CC-Daten versuchen zu berechnen (in 'try' gewrappt)
+mvp_2025_cc_result <- try(min_var_portfolio(exp_return_2025_cc, cov_matrix_2025_cc), silent = TRUE)
+
+# Prüfen, ob der Optimierer mit der na.omit-Matrix abstürzt
+if(!inherits(mvp_2025_cc_result, "try-error") && !is.na(mvp_2025_cc_result$risk[1])) {
+  
+  # Gewichte extrahieren
+  w_mvp_2025_cc <- extract_weights(mvp_2025_cc_result, return_2025_cc, "2025", "Min Variance (CC)")
+  
+  # Gewichte mit der normalen Methode (w_mvp_2025) mergen
+  vergleich_gewichte <- merge(
+    x = w_mvp_2025[, c("Aktie", "Gewicht")],
+    y = w_mvp_2025_cc[, c("Aktie", "Gewicht")],
+    by = "Aktie",
+    all = TRUE,
+    suffixes = c("_Normal", "_na_omit")
+  )
+  
+  # NAs durch 0 ersetzen (Aktien, die in der einen Methode gekauft wurden, in der anderen aber nicht)
+  vergleich_gewichte[is.na(vergleich_gewichte)] <- 0
+  
+  # Absolute Differenz berechnen
+  vergleich_gewichte$Differenz_absolut <- abs(vergleich_gewichte$Gewicht_Normal - vergleich_gewichte$Gewicht_na_omit)
+  
+  # Nach größter Differenz absteigend sortieren
+  vergleich_gewichte <- vergleich_gewichte[order(-vergleich_gewichte$Differenz_absolut), ]
+  
+  # Konsole ausgeben und exportieren
+  cat("\n--- GEWICHTEVERGLEICH: NORMAL VS. NA.OMIT (MVP 2025) ---\n")
+  print(head(vergleich_gewichte, 15)) # Zeigt die Top 15 Abweichungen
+  write.csv2(vergleich_gewichte, "data/Gewichtevergleich_MVP_2025.csv", row.names = FALSE)
+  cat("Der Vergleich wurde als 'Gewichtevergleich_MVP_2025.csv' gespeichert!\n")
+  
+} else {
+  # Prüfung ob na.omit möglich
+  cat("\n=========================================================================\n")
+  cat("ACHTUNG: Der Gewichtevergleich konnte nicht durchgeführt werden!\n")
+  cat("Grund: Die na.omit Matrix für 2025 ist mathematisch kollabiert (nicht positiv definit).\n")
+  cat("Complete-Case Analysis hier nicht anwendbar ist!\n")
+  cat("=========================================================================\n")
+}
+
 
 
 
