@@ -82,6 +82,19 @@ df_merged <- df_weights %>%
   # left join: wichtig, da eine Aktie in mehreren Portfolios im Jahr sein kann!
   left_join(df_universe_zscores, by = c("Jahr", "Aktie"))
 
+# =========================================================================
+# DYNAMISCHE PORTFOLIO-REIHENFOLGE (Nach Vola sortiert)
+# =========================================================================
+# Wir ermitteln die Portfolionamen direkt aus der Summary und sortieren sie nach Risiko.
+portfolio_order <- df_summary %>%
+  group_by(Portfolio_Typ) %>%
+  summarise(mean_vola = mean(Vola_Prozent), .groups = "drop") %>%
+  arrange(mean_vola) %>%
+  pull(Portfolio_Typ)
+
+cat("\nSortier-Reihenfolge für Plots erkannt:\n")
+print(portfolio_order)
+
 # df für Stilfaktoren
 df_exposures_styles <- df_merged %>%
   group_by(Jahr, Portfolio_Typ) %>%
@@ -158,8 +171,6 @@ plot_data_region <- expand_grid(
   mutate(Gewicht_Prozent = replace_na(Gewicht_Prozent, 0))
 
 # Sortierungen für das Diagramm festlegen
-portfolio_order <- c("Min Variance", "Target Vol 10%", "Target Vol 12%", "Target Vol 15%", 
-                     "Target Ret 12%", "Target Ret 15%", "Target Ret 18%")
 plot_data_region$Portfolio_Typ <- factor(plot_data_region$Portfolio_Typ, levels = portfolio_order)
 
 # Dynamische Sortierung PRO JAHR
@@ -195,7 +206,7 @@ plot_region_grid <- ggplot(plot_data_region, aes(x = Kategorie_Facet)) +
   scale_x_discrete(labels = function(x) gsub("^.*__", "", x)) +
   
   scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
-  scale_fill_viridis_d(option = "mako") + 
+  scale_fill_viridis_d(option = "viridis") + 
   
   theme_minimal(base_size = 14) +
   theme(
@@ -263,8 +274,6 @@ plot_data_branche <- expand_grid(
   mutate(Gewicht_Prozent = replace_na(Gewicht_Prozent, 0))
 
 # Sortierungen für das Diagramm festlegen
-portfolio_order <- c("Min Variance", "Target Vol 10%", "Target Vol 12%", "Target Vol 15%", 
-                     "Target Ret 12%", "Target Ret 15%", "Target Ret 18%")
 plot_data_branche$Portfolio_Typ <- factor(plot_data_branche$Portfolio_Typ, levels = portfolio_order)
 
 # Dynamische Sortierung PRO JAHR
@@ -301,7 +310,7 @@ plot_branche_grid <- ggplot(plot_data_branche, aes(x = Kategorie_Facet)) +
   scale_x_discrete(labels = function(x) str_wrap(gsub("^.*__", "", x), width = 20)) +
   
   scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
-  scale_fill_viridis_d(option = "mako") + 
+  scale_fill_viridis_d(option = "viridis") + 
   
   theme_minimal(base_size = 14) +
   theme(
@@ -332,8 +341,6 @@ plot_data_size <- df_exposures_styles %>%
   select(Jahr, Portfolio_Typ, Exp_Size)
 
 # 2. Portfolios sortieren (Risiko aufsteigend)
-portfolio_order <- c("Min Variance", "Target Vol 10%", "Target Vol 12%", "Target Vol 15%", 
-                     "Target Ret 12%", "Target Ret 15%", "Target Ret 18%")
 plot_data_size$Portfolio_Typ <- factor(plot_data_size$Portfolio_Typ, levels = portfolio_order)
 
 # 3. Der Size-Plot
@@ -348,7 +355,7 @@ plot_size <- ggplot(plot_data_size, aes(x = Portfolio_Typ, y = Exp_Size, fill = 
   # Wieder das 4-Jahres-Grid im Hochformat
   facet_wrap(~ Jahr, ncol = 1) +
   
-  scale_fill_viridis_d(option = "mako") + 
+  scale_fill_viridis_d(option = "viridis") + 
   
   theme_minimal(base_size = 14) +
   theme(
@@ -379,7 +386,7 @@ plot_value <- ggplot(plot_data_value, aes(x = Portfolio_Typ, y = Exp_Value, fill
   geom_col(color = "black", linewidth = 0.2, alpha = 0.9) +
   geom_hline(yintercept = 0, color = "red", linewidth = 1) +
   facet_wrap(~ Jahr, ncol = 1) +
-  scale_fill_viridis_d(option = "mako") + 
+  scale_fill_viridis_d(option = "viridis") + 
   theme_minimal(base_size = 14) +
   theme(
     axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1, face = "bold"),
@@ -406,7 +413,7 @@ plot_mom <- ggplot(plot_data_mom, aes(x = Portfolio_Typ, y = Exp_Momentum, fill 
   geom_col(color = "black", linewidth = 0.2, alpha = 0.9) +
   geom_hline(yintercept = 0, color = "red", linewidth = 1) +
   facet_wrap(~ Jahr, ncol = 1) +
-  scale_fill_viridis_d(option = "mako") + 
+  scale_fill_viridis_d(option = "viridis") + 
   theme_minimal(base_size = 14) +
   theme(
     axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1, face = "bold"),
@@ -433,7 +440,7 @@ plot_lowvol <- ggplot(plot_data_lowvol, aes(x = Portfolio_Typ, y = Exp_LowVol, f
   geom_col(color = "black", linewidth = 0.2, alpha = 0.9) +
   geom_hline(yintercept = 0, color = "red", linewidth = 1) +
   facet_wrap(~ Jahr, ncol = 1) +
-  scale_fill_viridis_d(option = "mako") + 
+  scale_fill_viridis_d(option = "viridis") + 
   theme_minimal(base_size = 14) +
   theme(
     axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1, face = "bold"),
