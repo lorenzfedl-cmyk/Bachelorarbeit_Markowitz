@@ -85,7 +85,7 @@ df_merged <- df_weights %>%
 # =========================================================================
 # DYNAMISCHE PORTFOLIO-REIHENFOLGE (Nach Vola sortiert)
 # =========================================================================
-# Wir ermitteln die Portfolionamen direkt aus der Summary und sortieren sie nach Risiko.
+# Portfolionamen aus summary ermitteln und nach vol sortieren
 portfolio_order <- df_summary %>%
   group_by(Portfolio_Typ) %>%
   summarise(mean_vola = mean(Vola_Prozent), .groups = "drop") %>%
@@ -125,85 +125,82 @@ df_exposures_region <- df_merged %>%
 # VISUALISIERUNGEN
 
 # =========================================================================
-# 1. REGIONEN
+# 1. TOP 4 EINZELTITEL (UNTERNEHMEN)
 # =========================================================================
 
-# Benchmark-Gewichte vom Index für ALLE Regionen nach MV berechnen (für Sortierung)
-df_benchmark_region <- df_universe %>%
-  group_by(Jahr, GEOGN) %>%
-  # MV pro Jahr und Region addieren
-  summarise(Region_MV = sum(MV, na.rm = TRUE), .groups = "drop_last") %>%
-  # Region-MV durch Summe ergibt den relativen Anteil einer Region pro Jahr
-  mutate(Index_Gewicht = Region_MV / sum(Region_MV, na.rm = TRUE)) %>%
+# Benchmark-Gewichte (S&P 500 Index) für ALLE Aktien berechnen
+df_benchmark_aktie <- df_universe %>%
+  group_by(Jahr) %>%
+  mutate(Index_Gewicht = MV / sum(MV, na.rm = TRUE)) %>%
+  select(Jahr, Aktie, Index_Gewicht) %>%
   ungroup()
 
-# Top 4 Regionen aus den Portfolios PRO JAHR GESAMT ermitteln
-top4_regions_per_year <- df_exposures_region %>%
-  group_by(Jahr, GEOGN) %>%
-  # Summen pro Jahr und Region bilden
-  summarise(Gesamt_Portfolio_Gewicht = sum(Gewicht_Prozent, na.rm = TRUE), .groups = "drop_last") %>%
-  # die 4 stärksten Regionen nach Anteil absteigend ordnen
+# Top 4 Aktien aus den Portfolios PRO JAHR ermitteln (über alle Portfolio-Typen hinweg)
+top4_aktien_per_year <- df_merged %>%
+  group_by(Jahr, Aktie) %>%
+  # Wir schauen, welche Aktien in Summe über alle 5 Portfolios am stärksten gewichtet sind
+  summarise(Gesamt_Portfolio_Gewicht = sum(Gewicht, na.rm = TRUE), .groups = "drop_last") %>%
   slice_max(order_by = Gesamt_Portfolio_Gewicht, n = 4) %>%
-  select(Jahr, GEOGN) %>%
-  mutate(Kategorie = GEOGN) 
+  select(Jahr, Aktie) %>%
+  mutate(Kategorie = Aktie) 
 
-# Gesamtgewichte zu Regionen zuordnen und "Sonstige" (=alles nach den 4 größten) einfügen
-df_bench_plot <- df_benchmark_region %>%
-  # alle die nicht zu den Top 4 gehören werden als NA bzw. Sonstige bezeichnet
-  left_join(top4_regions_per_year, by = c("Jahr", "GEOGN")) %>%
+# Benchmark-Gewichte für den Plot vorbereiten (Top 4 + Sonstige)
+df_bench_plot_aktie <- df_benchmark_aktie %>%
+  left_join(top4_aktien_per_year, by = c("Jahr", "Aktie")) %>%
   mutate(Kategorie = replace_na(Kategorie, "Sonstige")) %>%
   group_by(Jahr, Kategorie) %>%
   summarise(Index_Gewicht = sum(Index_Gewicht, na.rm = TRUE), .groups = "drop")
 
-# nochmal Gesamtgewichte zu Regionen zuordnen für Portfolios
-df_port_plot <- df_exposures_region %>%
-  left_join(top4_regions_per_year, by = c("Jahr", "GEOGN")) %>%
+# Portfoliogewichte für den Plot vorbereiten (Top 4 + Sonstige)
+df_port_plot_aktie <- df_merged %>%
+  left_join(top4_aktien_per_year, by = c("Jahr", "Aktie")) %>%
   mutate(Kategorie = replace_na(Kategorie, "Sonstige")) %>%
   group_by(Jahr, Portfolio_Typ, Kategorie) %>%
-  summarise(Gewicht_Prozent = sum(Gewicht_Prozent, na.rm = TRUE), .groups = "drop")
+  summarise(Gewicht_Prozent = sum(Gewicht, na.rm = TRUE), .groups = "drop")
 
-# Gewichte mit Jahr versehen damit 4 Gruppen/Summen gebildet werden können
-plot_data_region <- expand_grid(
-  df_bench_plot,
-  Portfolio_Typ = unique(df_port_plot$Portfolio_Typ)
+# Daten für den Plot mergen (Benchmark + Portfolios)
+plot_data_aktie <- expand_grid(
+  df_bench_plot_aktie,
+  Portfolio_Typ = unique(df_port_plot_aktie$Portfolio_Typ)
 ) %>%
-  left_join(df_port_plot, by = c("Jahr", "Kategorie", "Portfolio_Typ")) %>%
+  left_join(df_port_plot_aktie, by = c("Jahr", "Kategorie", "Portfolio_Typ")) %>%
   mutate(Gewicht_Prozent = replace_na(Gewicht_Prozent, 0))
 
-# Sortierungen für das Diagramm festlegen
-plot_data_region$Portfolio_Typ <- factor(plot_data_region$Portfolio_Typ, levels = portfolio_order)
+# Dynamische Sortierung anwenden
+plot_data_aktie$Portfolio_Typ <- factor(plot_data_aktie$Portfolio_Typ, levels = portfolio_order)
 
-# Dynamische Sortierung PRO JAHR
-# Zuerst die absolute Summe der Portfoliogewichte pro Region und Jahr berechnen
-plot_data_region <- plot_data_region %>%
+# Dynamische Sortierung der X-Achse (Top-Titel nach links, Sonstige nach rechts)
+plot_data_aktie <- plot_data_aktie %>%
   group_by(Jahr, Kategorie) %>%
   mutate(Summe_Gewicht_Jahr = sum(Gewicht_Prozent, na.rm = TRUE)) %>%
   ungroup()
 
-# "Sonstige" zwingend ans Ende setzen (fiktiv sehr negative Summe)
-plot_data_region <- plot_data_region %>%
+# "Sonstige" zwingend ans Ende setzen
+plot_data_aktie <- plot_data_aktie %>%
   mutate(Summe_Gewicht_Jahr = ifelse(Kategorie == "Sonstige", -Inf, Summe_Gewicht_Jahr))
 
-# Um pro Jahr individuell sortieren zu können, wird die Hilfsspalte: "Jahr__Kategorie" hinzugefügt
-plot_data_region <- plot_data_region %>%
+# Hilfsspalte für das Reordering im Grid
+plot_data_aktie <- plot_data_aktie %>%
   mutate(Kategorie_Facet = paste(Jahr, Kategorie, sep = "__"))
 
-# nach Hilfsspalte absteigend sortieren
-plot_data_region$Kategorie_Facet <- reorder(plot_data_region$Kategorie_Facet, -plot_data_region$Summe_Gewicht_Jahr)
+plot_data_aktie$Kategorie_Facet <- reorder(plot_data_aktie$Kategorie_Facet, -plot_data_aktie$Summe_Gewicht_Jahr)
 
-# finale Plot
-plot_region_grid <- ggplot(plot_data_region, aes(x = Kategorie_Facet)) +
+# Der finale Plot
+plot_aktie_grid <- ggplot(plot_data_aktie, aes(x = Kategorie_Facet)) +
   
+  # Balken für die Portfolios
   geom_col(aes(y = Gewicht_Prozent, fill = Portfolio_Typ), 
            position = position_dodge(width = 0.85), 
            color = "black", linewidth = 0.2, alpha = 0.9) +
   
+  # Rote Linie für das Index-Gewicht (S&P 500 Anteil dieser Aktie)
   geom_errorbar(aes(ymin = Index_Gewicht, ymax = Index_Gewicht), 
                 color = "red", linewidth = 1, width = 0.85) +
   
   facet_wrap(~ Jahr, ncol = 1, scales = "free_x") +
   
-  scale_x_discrete(labels = function(x) gsub("^.*__", "", x)) +
+  # Namen säubern: Jahr-Präfix weg, "DEAD" entfernen, Punkte in Leerzeichen umwandeln und umbrechen
+  scale_x_discrete(labels = function(x) str_wrap(gsub("\\.", " ", gsub("\\.+DEAD", "", gsub("^.*__", "", x))), width = 12)) +
   
   scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
   scale_fill_viridis_d(option = "viridis") + 
@@ -216,16 +213,17 @@ plot_region_grid <- ggplot(plot_data_region, aes(x = Kategorie_Facet)) +
     panel.grid.major.x = element_blank()
   ) +
   labs(
-    title = "Regionale Portfolio-Allokation vs. Index",
-    subtitle = "Top 4 Regionen im Portfolio + 'Sonstige' (Sortiert nach Portfoliogewicht)",
+    title = "Top 4 Einzeltitel (Unternehmen) vs. Index",
+    subtitle = "Die 4 größten Positionen im Portfolio pro Jahr (Rote Linie = Indexgewicht)",
     x = NULL,
     y = "Anteil am Portfolio / Index",
     fill = "Portfolio:"
   )
 
-print(plot_region_grid)
+print(plot_aktie_grid)
+
 # Dateiexport
-ggsave("data/Plot_Regionen_Grid.png", plot = plot_region_grid, width = 9, height = 10, dpi = 300) 
+ggsave("data/Plot_Einzeltitel_Grid.png", plot = plot_aktie_grid, width = 9, height = 10, dpi = 300)
 
 # =========================================================================
 # 2. BRANCHEN
@@ -340,7 +338,7 @@ ggsave("data/Plot_Branchen_Grid.png", plot = plot_branche_grid, width = 9, heigh
 plot_data_size <- df_exposures_styles %>%
   select(Jahr, Portfolio_Typ, Exp_Size)
 
-# 2. Portfolios sortieren (Risiko aufsteigend)
+# 2. Portfolios sortieren (Vola aufsteigend)
 plot_data_size$Portfolio_Typ <- factor(plot_data_size$Portfolio_Typ, levels = portfolio_order)
 
 # 3. Der Size-Plot
@@ -359,7 +357,7 @@ plot_size <- ggplot(plot_data_size, aes(x = Portfolio_Typ, y = Exp_Size, fill = 
   
   theme_minimal(base_size = 14) +
   theme(
-    # Text leicht schräg, damit "Target Vol..." gut hinpasst
+    # Text leicht schräg, damit Beschreibung/Text leserlich
     axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1, face = "bold"),
     legend.position = "none", # Keine Legende nötig, da Namen schon auf der X-Achse stehen
     strip.text = element_text(face = "bold", size = 14),

@@ -5,9 +5,6 @@ library(quadprog)
 
 # VARIABLEN
 
-# Schwellenwert für die relative Anzahl von Nullen an Tagen, die mit "NA" ersetzt werden sollen
-thresh_zero_return <- 0.05
-
 # Schwellenewert für die relative Anzahl von Renditen pro Aktie die vorhanden sein müssen
 thresh_valid_returns <- 0.4
 
@@ -129,30 +126,25 @@ calculate_momentum <- function(return_df) {
 }
 
 # Alle NA/0 - Funktionen auf alle vier Datensätze anwenden
-return_2010 <- replace_zeros_with_na(return_2010, thresh_zero_return)
-return_2015 <- replace_zeros_with_na(return_2015, thresh_zero_return)
-return_2020 <- replace_zeros_with_na(return_2020, thresh_zero_return)
-return_2025 <- replace_zeros_with_na(return_2025, thresh_zero_return)
-
 return_2010 <- filter_stocks_by_na(return_2010, thresh_valid_returns)
 return_2015 <- filter_stocks_by_na(return_2015, thresh_valid_returns)
 return_2020 <- filter_stocks_by_na(return_2020, thresh_valid_returns)
 return_2025 <- filter_stocks_by_na(return_2025, thresh_valid_returns)
 
-# Daten bereinigen: Tage mit mind. 1xNA werden gelöscht
+# Daten bereinigen: Tage mit mind. 1xNA werden gelöscht (Für Complete Case!)
 return_2010_cc <- na.omit(return_2010)
 return_2015_cc <- na.omit(return_2015)
 return_2020_cc <- na.omit(return_2020)
 return_2025_cc <- na.omit(return_2025)
 
-# Übersichtstabelle für den Datenverlust erstellen
+# Übersichtstabelle für den cc-Datenverlust erstellen
 robustness_summary <- data.frame(
   Jahr = c("2010", "2015", "2020", "2025"),
   Verbleibende_Tage = c(nrow(return_2010_cc), nrow(return_2015_cc), nrow(return_2020_cc), nrow(return_2025_cc)),
   Gesamte_Tage = c(nrow(return_2010), nrow(return_2015), nrow(return_2020), nrow(return_2025))
 )
 
-# Prozentualen Verlust berechnen
+# Prozentualen Verlust berechnen (cc)
 robustness_summary$Verlust_Prozent <- round(100 - (robustness_summary$Verbleibende_Tage / robustness_summary$Gesamte_Tage * 100), 2)
 
 # Tabelle in der Konsole anzeigen (und im Environment von RStudio abrufbar)
@@ -276,7 +268,7 @@ target_vola_portfolio <- function(mu, Sigma, target_vol, tol = 1e-4, max_iter = 
   max_ret <- max(mu, na.rm = TRUE)
   max_port <- target_return_portfolio(mu, Sigma, max_ret)
   
-  # Sicherheitsprüfung: Ist das Zielrisiko überhaupt physikalisch möglich?
+  # Sicherheitsprüfung: Ist das Zielrisiko überhaupt möglich?
   if(target_vol <= mvp$risk) {
     warning(paste("Zielrisiko ist zu gering! Minimum ist", round(mvp$risk*100,2), "%. Gebe Minimum-Varianz-Portfolio zurück."))
     return(mvp)
@@ -286,7 +278,7 @@ target_vola_portfolio <- function(mu, Sigma, target_vol, tol = 1e-4, max_iter = 
     return(max_port)
   }
   
-  # 2. Bisektionsverfahren (Intervallschachtelung)
+  # 2. Bisektionsverfahren
   low_ret <- mvp$expected_return
   high_ret <- max_ret
   
@@ -301,17 +293,17 @@ target_vola_portfolio <- function(mu, Sigma, target_vol, tol = 1e-4, max_iter = 
     # Abweichung vom Zielrisiko
     diff <- port_mid$risk - target_vol
     
-    # Wenn die Abweichung kleiner als die Toleranz (0.01%) ist, haben wir das perfekte Portfolio!
+    # Abweichung
     if (abs(diff) < tol) {
       return(port_mid)
     }
     
     # Intervall anpassen
     if (diff < 0) {
-      # Risiko ist zu klein -> wir brauchen mehr Rendite (untere Grenze anheben)
+      # Risiko ist zu klein -> mehr Rendite (untere Grenze anheben)
       low_ret <- mid_ret
     } else {
-      # Risiko ist zu groß -> wir brauchen weniger Rendite (obere Grenze absenken)
+      # Risiko ist zu groß -> weniger Rendite (obere Grenze absenken)
       high_ret <- mid_ret
     }
   }
@@ -319,7 +311,6 @@ target_vola_portfolio <- function(mu, Sigma, target_vol, tol = 1e-4, max_iter = 
   # Falls max_iter erreicht wird, gib die bestmögliche Näherung zurück
   return(target_return_portfolio(mu, Sigma, (low_ret + high_ret) / 2))
 }
-
 
 # =========================================================================
 # GLOBALE ZIEL-VOLATILITÄTEN ERMITTELN (SICHERER BEREICH)
@@ -363,7 +354,7 @@ cat("Port 4:", round(target_vol_3*100, 2), "%\n")
 cat("Port 5:", round(target_vol_4*100, 2), "%\n\n")
 
 # =========================================================================
-# ZIEL-PORTFOLIOS BERECHNEN: ALLE JAHRE (REFAKTORIERT MIT SCHLEIFE)
+# ZIEL-PORTFOLIOS BERECHNEN: ALLE JAHRE mit Schleife
 # =========================================================================
 
 # 1. Listen vorbereiten, um mit einer Schleife durch alle Jahre zu iterieren
@@ -377,7 +368,7 @@ list_returns <- list("2010" = return_2010, "2015" = return_2015, "2020" = return
 all_summaries <- list()
 all_weights <- list()
 
-# 2. Die Schleife (Loop) führt die Schritte nun für jedes Jahr automatisch durch
+# 2. Die Schleife führt die Schritte nun für jedes Jahr automatisch durch
 for (y in years) {
   
   # Daten für das jeweilige Jahr aus den Listen abrufen
@@ -392,13 +383,13 @@ for (y in years) {
   p4 <- target_vola_portfolio(mu, Sigma, target_vol_3)
   p5 <- target_vola_portfolio(mu, Sigma, target_vol_4)
   
-  # Labels generieren (für schöne Namen in der Tabelle)
+  # Labels generieren (Name in der Tabelle)
   label_p2 <- paste0("Target Vol ", round(target_vol_1 * 100, 2), "%")
   label_p3 <- paste0("Target Vol ", round(target_vol_2 * 100, 2), "%")
   label_p4 <- paste0("Target Vol ", round(target_vol_3 * 100, 2), "%")
   label_p5 <- paste0("Target Vol ", round(target_vol_4 * 100, 2), "%")
   
-  # Summary-Tabelle für dieses Jahr bauen
+  # Summary-Tabelle für dieses Jahr erstellen
   summ <- data.frame(
     Jahr = y,
     Portfolio_Typ = c("Min Variance", label_p2, label_p3, label_p4, label_p5),
@@ -461,7 +452,6 @@ cat("Berechnung abgeschlossen. Daten wurden erfolgreich exportiert!\n")
 
 # Available-Case vs. Complete-Case (na.omit)
 # Exemplarisch für das min-var-portfolio aus 2025
-
 cat("\nStarte Gewichtevergleich für 2025...\n")
 
 # neue Erwartungswerte für die CC-Datene berechnen
