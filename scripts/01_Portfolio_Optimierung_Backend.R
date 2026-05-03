@@ -501,8 +501,32 @@ if(!inherits(mvp_2025_cc_result, "try-error") && !is.na(mvp_2025_cc_result$risk[
   cat("=========================================================================\n")
 }
 
+# =========================================================================
+# EXPORT DER ERWARTETEN RENDITEN (für Effizienzgrenzendarstellung)
+# =========================================================================
 
+# Vektoren in ein Dataframe umwandeln und direkt als CSV speichern
+df_expected_returns <- bind_rows(
+  enframe(exp_return_2010, name = "Aktie", value = "Exp_Return") %>% mutate(Jahr = "2010"),
+  enframe(exp_return_2015, name = "Aktie", value = "Exp_Return") %>% mutate(Jahr = "2015"),
+  enframe(exp_return_2020, name = "Aktie", value = "Exp_Return") %>% mutate(Jahr = "2020"),
+  enframe(exp_return_2025, name = "Aktie", value = "Exp_Return") %>% mutate(Jahr = "2025")
+)
 
+write_csv2(df_expected_returns, "data/Portfolio_ExpectedReturns_Master.csv")
 
+# =========================================================================
+# Topaktien e(r) und vol Ausgabe (für Tabelle)
+# =========================================================================
+
+tabelle_top_aktien <- plot_data_einzelaktien %>%
+  select(Jahr, Aktie, Rendite_Prozent, Vola_Prozent) %>%
+  mutate(
+    Rendite_Prozent = paste0(format(round(Rendite_Prozent, 2), nsmall = 2, decimal.mark = ","), " %"),
+    Vola_Prozent = paste0(format(round(Vola_Prozent, 2), nsmall = 2, decimal.mark = ","), " %")
+  )
+
+cat("\n--- DATEN FÜR DEINE WORD-TABELLE (MAX-RETURN AKTIEN) ---\n")
+print(tabelle_top_aktien)
 
 
