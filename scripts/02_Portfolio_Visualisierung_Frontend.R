@@ -460,47 +460,20 @@ ggsave("data/Plot_Factor_LowVol.png", plot = plot_lowvol, width = 9, height = 10
 
 
 
-# fawefaw
-
 # =========================================================================
-# 7. EFFIZIENZGRENZEN (MINIMALISTISCH & CLEAN)
+# 7. EFFIZIENZGRENZEN (NUR PORTFOLIOS, OHNE EINZELAKTIEN)
 # =========================================================================
 
-# 1. Die ECHTE theoretische Maximum-Return-Aktie aus dem gesamten Markt ermitteln
-max_return_aktien <- df_expected_returns %>%
-  group_by(Jahr) %>%
-  arrange(desc(Exp_Return)) %>%
-  slice_head(n = 1) %>% 
-  select(Jahr, Aktie) %>% 
-  ungroup()
-
-# 2. Daten für die 5 Portfolios (Effizienzgrenze) vorbereiten
+# 1. Daten für die 5 Portfolios (Effizienzgrenze) vorbereiten
 plot_data_frontier <- df_summary %>%
   mutate(Jahr = as.character(Jahr))
 plot_data_frontier$Portfolio_Typ <- factor(plot_data_frontier$Portfolio_Typ, levels = portfolio_order)
 
-# 3. Die ECHTEN Koordinaten der Einzelaktien (mit Exp_Return!) holen
-plot_data_einzelaktien <- max_return_aktien %>%
-  left_join(df_universe, by = c("Jahr", "Aktie")) %>%
-  left_join(df_expected_returns, by = c("Jahr", "Aktie")) %>% 
-  mutate(
-    Vola_Prozent = Volatilitat * 100,  
-    Rendite_Prozent = Exp_Return * 100   
-  )
-
-# 4. Start- und Endpunkte für die gestrichelte Verbindungslinie berechnen
-verbindungs_linien <- plot_data_frontier %>%
-  # Startpunkt: Das riskanteste Target-Vol-Portfolio
-  filter(Portfolio_Typ == portfolio_order[length(portfolio_order)]) %>%
-  select(Jahr, Vola_Start = Vola_Prozent, Rendite_Start = Rendite_Prozent) %>%
-  # Endpunkt: Der Diamant
-  left_join(plot_data_einzelaktien %>% select(Jahr, Vola_End = Vola_Prozent, Rendite_End = Rendite_Prozent), by = "Jahr")
-
-# 5. Das Minimum-Varianz-Portfolio (Startpunkt) isolieren
+# 2. Das Minimum-Varianz-Portfolio (Startpunkt) isolieren (als optischer Diamant)
 plot_data_minvar <- plot_data_frontier %>%
   filter(Portfolio_Typ == portfolio_order[1])
 
-# 6. Der finale Plot
+# 3. Der finale Plot
 plot_frontier <- ggplot() +
   
   # A) Die Linien der berechneten Effizienzgrenzen
@@ -508,37 +481,20 @@ plot_frontier <- ggplot() +
             aes(x = Vola_Prozent, y = Rendite_Prozent, color = Jahr, group = Jahr), 
             linewidth = 1.2, alpha = 0.8) +
   
-  # B) Die gestrichelte Fortsetzung bis zum absoluten Maximum (Diamant)
-  geom_segment(data = verbindungs_linien,
-               aes(x = Vola_Start, y = Rendite_Start, xend = Vola_End, yend = Rendite_End, color = Jahr),
-               linetype = "dashed", linewidth = 0.8, alpha = 0.6) +
-  
-  # C) Die Standard-Portfolios (Punkte)
+  # B) Die Standard-Portfolios (Punkte)
   geom_point(data = plot_data_frontier, 
              aes(x = Vola_Prozent, y = Rendite_Prozent, color = Jahr, shape = Portfolio_Typ), 
              size = 4, stroke = 1.2) +
   
-  # D) Die Minimum-Varianz-Portfolios als Diamanten (Farbe passend zum Jahr)
+  # C) Die Minimum-Varianz-Portfolios als Diamanten (Farbe passend zum Jahr)
   geom_point(data = plot_data_minvar, 
              aes(x = Vola_Prozent, y = Rendite_Prozent, fill = Jahr), 
              shape = 23, color = "black", size = 5, stroke = 1.2) +
   
-  # E) Die Einzelaktien als Diamanten (Farbe passend zum Jahr)
-  geom_point(data = plot_data_einzelaktien, 
-             aes(x = Vola_Prozent, y = Rendite_Prozent, fill = Jahr), 
-             shape = 23, color = "black", size = 5, stroke = 1.2) +
-  
-  # F) Beschriftung NUR für die Einzelaktien am oberen Ende (Schriftgröße 3)
-  geom_text_repel(data = plot_data_einzelaktien, 
-                  aes(x = Vola_Prozent, y = Rendite_Prozent, 
-                      label = str_wrap(gsub("\\.", " ", Aktie), width = 15)), 
-                  size = 3, fontface = "bold", color = "black",
-                  box.padding = 1, point.padding = 0.5, nudge_y = 0.02) +
-  
-  # Farben, Legenden-Ausblendung für MinVar (breaks) und Formen
+  # Farben, Legenden und Formen
   scale_color_viridis_d(option = "viridis", direction = -1) +
   scale_fill_viridis_d(option = "viridis", direction = -1, guide = "none") +
-  # Das Argument breaks blendet das erste Portfolio aus der Legende aus!
+  # MVP aus der Shape-Legende ausblenden, da es durch den farbigen Diamanten schon hervorgehoben ist
   scale_shape_manual(values = c(16, 15, 17, 18, 8), breaks = portfolio_order[-1]) +
   scale_x_continuous(labels = scales::percent_format(scale = 1, accuracy = 0.1)) +
   scale_y_continuous(labels = scales::percent_format(scale = 1, accuracy = 0.1)) +
@@ -549,7 +505,6 @@ plot_frontier <- ggplot() +
     legend.title = element_text(face = "bold"),
     panel.grid.minor = element_blank()
   ) +
-  # Untertitel (subtitle) komplett entfernt
   labs(
     title = "Verschiebung der Effizienzgrenzen (2010 - 2025)",
     x = "Volatilität (Risiko)",
@@ -560,3 +515,11 @@ plot_frontier <- ggplot() +
 
 print(plot_frontier)
 ggsave("data/Plot_Efficient_Frontier_Clean.png", plot = plot_frontier, width = 10, height = 7, dpi = 300)
+
+
+
+
+
+
+
+

@@ -1,9 +1,16 @@
 # libraries laden
 library(corpcor)
 library(readxl)
+library(tidyverse)
 library(quadprog)
 
 # VARIABLEN
+
+# Ziel-Volatilitäten
+target_vol_1 <- 0.15
+target_vol_2 <- 0.18
+target_vol_3 <- 0.21
+target_vol_4 <- 0.24
 
 # Schwellenewert für die relative Anzahl von Renditen pro Aktie die vorhanden sein müssen
 thresh_valid_returns <- 0.4
@@ -38,23 +45,6 @@ return_2010 <- return_2010 / 100
 return_2015 <- return_2015 / 100
 return_2020 <- return_2020 / 100
 return_2025 <- return_2025 / 100
-
-# Funktion zum Ersetzen von Nullen durch NA bei Überschreiten des Schwellenwerts
-replace_zeros_with_na <- function(df, threshold) {
-  # Zeilen ermitteln, die den Schwellenwert erreichen oder überschreiten
-  target_rows <- rowSums(df == 0, na.rm = TRUE) / ncol(df) >= threshold
-  
-  # Isoliere diese Zeilen temporär
-  temp_subset <- df[target_rows, ]
-  
-  # Ersetze nur innerhalb dieser isolierten Zeilen die Nullen durch NA
-  temp_subset[temp_subset == 0] <- NA
-  
-  # Füge die bearbeiteten Zeilen wieder in den originalen Datensatz ein
-  df[target_rows, ] <- temp_subset
-  
-  return(df)
-}
 
 # Funktion zum Entfernen von Aktien (Spalten) mit zu wenig Datenpunkten
 filter_stocks_by_na <- function(df, threshold) {
@@ -311,47 +301,6 @@ target_vola_portfolio <- function(mu, Sigma, target_vol, tol = 1e-4, max_iter = 
   # Falls max_iter erreicht wird, gib die bestmögliche Näherung zurück
   return(target_return_portfolio(mu, Sigma, (low_ret + high_ret) / 2))
 }
-
-# =========================================================================
-# GLOBALE ZIEL-VOLATILITÄTEN ERMITTELN (SICHERER BEREICH)
-# =========================================================================
-
-# 1. Durchschnitt der 4 MVP-Risiken ermitteln (Globale Untergrenze)
-mvp_2010 <- min_var_portfolio(exp_return_2010, cov_matrix_2010)
-mvp_2015 <- min_var_portfolio(exp_return_2015, cov_matrix_2015)
-mvp_2020 <- min_var_portfolio(exp_return_2020, cov_matrix_2020)
-mvp_2025 <- min_var_portfolio(exp_return_2025, cov_matrix_2025)
-
-vol_mvp_10 <- mvp_2010$risk
-vol_mvp_15 <- mvp_2015$risk
-vol_mvp_20 <- mvp_2020$risk
-vol_mvp_25 <- mvp_2025$risk
-avg_minvar <- mean(c(vol_mvp_10, vol_mvp_15, vol_mvp_20, vol_mvp_25))
-
-# 2. Max-Risiken ermitteln und das MINIMUM davon nehmen (Globale Obergrenze, wg. Jahr 2015)
-vol_max_10 <- sqrt(cov_matrix_2010[which.max(exp_return_2010), which.max(exp_return_2010)])
-vol_max_15 <- sqrt(cov_matrix_2015[which.max(exp_return_2015), which.max(exp_return_2015)])
-vol_max_20 <- sqrt(cov_matrix_2020[which.max(exp_return_2020), which.max(exp_return_2020)])
-vol_max_25 <- sqrt(cov_matrix_2025[which.max(exp_return_2025), which.max(exp_return_2025)])
-safe_max_vol <- min(c(vol_max_10, vol_max_15, vol_max_20, vol_max_25))
-
-# 3. Den absolut sicheren Bereich fünfteln
-vol_grid <- seq(avg_minvar, safe_max_vol, length.out = 6)
-
-# 4. Die 4 Ziel-Variablen definieren
-target_vol_1 <- vol_grid[2]
-target_vol_2 <- vol_grid[3]
-target_vol_3 <- vol_grid[4]
-target_vol_4 <- vol_grid[5]
-
-# Konsolenausgabe zur Kontrolle
-cat("\n--- GLOBALE ZIEL-VOLATILITÄTEN ---\n")
-cat("Startpunkt (Ø MVP):", round(avg_minvar*100, 2), "%\n")
-cat("Endpunkt (Sicheres Max):", round(safe_max_vol*100, 2), "%\n")
-cat("Port 2:", round(target_vol_1*100, 2), "%\n")
-cat("Port 3:", round(target_vol_2*100, 2), "%\n")
-cat("Port 4:", round(target_vol_3*100, 2), "%\n")
-cat("Port 5:", round(target_vol_4*100, 2), "%\n\n")
 
 # =========================================================================
 # ZIEL-PORTFOLIOS BERECHNEN: ALLE JAHRE mit Schleife
