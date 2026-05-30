@@ -46,6 +46,13 @@ return_2015 <- return_2015 / 100
 return_2020 <- return_2020 / 100
 return_2025 <- return_2025 / 100
 
+# Kopien der Renditedaten VOR der 40%-Filterung erstellen
+# Dadurch kann später verglichen werden, wie viele Aktien entfernt wurden.
+return_2010_raw <- return_2010
+return_2015_raw <- return_2015
+return_2020_raw <- return_2020
+return_2025_raw <- return_2025
+
 # Funktion zum Entfernen von Aktien (Spalten) mit zu wenig Datenpunkten
 filter_stocks_by_na <- function(df, threshold) {
   # relativen Anteil an gesamten Return ermitteln um mit dem Schwellenwert vergleichen zu können
@@ -120,6 +127,49 @@ return_2010 <- filter_stocks_by_na(return_2010, thresh_valid_returns)
 return_2015 <- filter_stocks_by_na(return_2015, thresh_valid_returns)
 return_2020 <- filter_stocks_by_na(return_2020, thresh_valid_returns)
 return_2025 <- filter_stocks_by_na(return_2025, thresh_valid_returns)
+
+# =========================================================================
+# ÜBERSICHT: ANZAHL DER AKTIEN VOR UND NACH DER 40%-FILTERUNG
+# =========================================================================
+
+filter_summary_stocks <- data.frame(
+  Jahr = c("2010", "2015", "2020", "2025"),
+  
+  Aktien_vor_Filter = c(
+    ncol(return_2010_raw),
+    ncol(return_2015_raw),
+    ncol(return_2020_raw),
+    ncol(return_2025_raw)
+  ),
+  
+  Aktien_nach_Filter = c(
+    ncol(return_2010),
+    ncol(return_2015),
+    ncol(return_2020),
+    ncol(return_2025)
+  )
+)
+
+# Anzahl der entfernten Aktien berechnen
+filter_summary_stocks$Entfernte_Aktien <- 
+  filter_summary_stocks$Aktien_vor_Filter - filter_summary_stocks$Aktien_nach_Filter
+
+# Prozentualen Anteil der entfernten Aktien berechnen
+filter_summary_stocks$Entfernte_Aktien_Prozent <- round(
+  filter_summary_stocks$Entfernte_Aktien / filter_summary_stocks$Aktien_vor_Filter * 100,
+  2
+)
+
+# Tabelle in der Konsole anzeigen
+print("--- ÜBERSICHT: AKTIEN VOR UND NACH DER 40%-FILTERUNG ---")
+print(filter_summary_stocks)
+
+# Tabelle als CSV speichern
+write.csv2(
+  filter_summary_stocks,
+  "data/Filter_Summary_Aktien.csv",
+  row.names = FALSE
+)
 
 # Daten bereinigen: Tage mit mind. 1xNA werden gelöscht (Für Complete Case!)
 return_2010_cc <- na.omit(return_2010)

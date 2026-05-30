@@ -336,14 +336,14 @@ ggsave("data/Plot_Branchen_Grid.png", plot = plot_branche_grid, width = 9, heigh
 # 3. SIZE
 # =========================================================================
 
-# 1. Daten isolieren
+# Daten isolieren
 plot_data_size <- df_exposures_styles %>%
   select(Jahr, Portfolio_Typ, Exp_Size)
 
-# 2. Portfolios sortieren (Vola aufsteigend)
+# Portfolios sortieren (Vola aufsteigend)
 plot_data_size$Portfolio_Typ <- factor(plot_data_size$Portfolio_Typ, levels = portfolio_order)
 
-# 3. Der Size-Plot
+# Der Size-Plot
 plot_size <- ggplot(plot_data_size, aes(x = Portfolio_Typ, y = Exp_Size, fill = Portfolio_Typ)) +
   
   # Balken einzeichnen
@@ -464,16 +464,16 @@ ggsave("data/Plot_Factor_LowVol.png", plot = plot_lowvol, width = 9, height = 10
 # 7. EFFIZIENZGRENZEN (NUR PORTFOLIOS, OHNE EINZELAKTIEN)
 # =========================================================================
 
-# 1. Daten für die 5 Portfolios (Effizienzgrenze) vorbereiten
+# Daten für die 5 Portfolios (Effizienzgrenze) vorbereiten
 plot_data_frontier <- df_summary %>%
   mutate(Jahr = as.character(Jahr))
 plot_data_frontier$Portfolio_Typ <- factor(plot_data_frontier$Portfolio_Typ, levels = portfolio_order)
 
-# 2. Das Minimum-Varianz-Portfolio (Startpunkt) isolieren (als optischer Diamant)
+# Das Minimum-Varianz-Portfolio (Startpunkt) isolieren (als optischer Diamant)
 plot_data_minvar <- plot_data_frontier %>%
   filter(Portfolio_Typ == portfolio_order[1])
 
-# 3. Der finale Plot
+# Der finale Plot
 plot_frontier <- ggplot() +
   
   # A) Die Linien der berechneten Effizienzgrenzen
