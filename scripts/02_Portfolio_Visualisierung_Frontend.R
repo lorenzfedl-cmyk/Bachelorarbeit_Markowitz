@@ -457,9 +457,6 @@ plot_lowvol <- ggplot(plot_data_lowvol, aes(x = Portfolio_Typ, y = Exp_LowVol, f
 print(plot_lowvol)
 ggsave("data/Plot_Factor_LowVol.png", plot = plot_lowvol, width = 9, height = 10, dpi = 300)
 
-
-
-
 # =========================================================================
 # 7. EFFIZIENZGRENZEN (NUR PORTFOLIOS, OHNE EINZELAKTIEN)
 # =========================================================================
@@ -517,7 +514,8 @@ print(plot_frontier)
 ggsave("data/Plot_Efficient_Frontier_Clean.png", plot = plot_frontier, width = 10, height = 7, dpi = 300)
 
 
-
+# Export der exposure-werte für die Tabelle
+write.csv2(df_exposures_styles, "data/Portfolio_Stilfaktoren_Master.csv", row.names = FALSE)
 
 
 
